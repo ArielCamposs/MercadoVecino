@@ -1,3 +1,5 @@
+import { logAdminAction } from '@/lib/admin_logger';
+import { broadcastPushNotification } from '@/lib/notification_sender';
 import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -24,9 +26,12 @@ import {
     Search,
     Send,
     ShieldCheck,
+    Sparkles,
     Star,
     ToggleRight as ToggleIcon,
     Trash2,
+    TrendingUp,
+    Trophy,
     UserMinus,
     UserPlus,
     Users,
@@ -60,7 +65,8 @@ export default function AdminDashboard() {
     const [refreshing, setRefreshing] = useState(false);
 
     // New state for Tabs
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'products' | 'reviews' | 'activity' | 'gallery' | 'categories' | 'reports' | 'banners'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'products' | 'reviews' | 'activity' | 'gallery' | 'categories' | 'reports' | 'banners' | 'audit'>('dashboard');
+    const [auditLogs, setAuditLogs] = useState<any[]>([]);
     const [users, setUsers] = useState<any[]>([]);
     const [products, setProducts] = useState<any[]>([]);
     const [reviews, setReviews] = useState<any[]>([]);
@@ -72,6 +78,13 @@ export default function AdminDashboard() {
     const [searchQuery, setSearchQuery] = useState('');
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [whatsappContactsCount, setWhatsappContactsCount] = useState(0);
+
+    // Advanced Metrics State
+    const [confirmedContactsCount, setConfirmedContactsCount] = useState(0);
+    const [conversionRate, setConversionRate] = useState(0);
+    const [topProducts, setTopProducts] = useState<any[]>([]);
+    const [topSellers, setTopSellers] = useState<any[]>([]);
+    const [openTicketsCount, setOpenTicketsCount] = useState(0);
 
     // Real-time Intelligence State
     const [onlineCount, setOnlineCount] = useState(0);
@@ -114,13 +127,20 @@ export default function AdminDashboard() {
                 .eq('id', selectedUser.id);
 
             if (error) {
-                console.error('[Admin] Supabase error verifying:', error);
+                console.error('[Admin] Error de Supabase al verificar:', error);
                 throw error;
             }
 
             Alert.alert(
                 newStatus ? 'Vendedor Verificado' : 'Verificación Removida',
                 newStatus ? 'Se ha otorgado el sello de confianza.' : 'Se ha retirado el sello de confianza.'
+            );
+
+            await logAdminAction(
+                newStatus ? 'verify_vendor' : 'unverify_vendor',
+                selectedUser.id,
+                'user',
+                { full_name: selectedUser.full_name }
             );
 
             // Refresh local state to reflect change immediately in modal if open
@@ -132,7 +152,7 @@ export default function AdminDashboard() {
 
             fetchData();
         } catch (err: any) {
-            console.error('[Admin] Catch error verifying:', err);
+            console.error('[Admin] Error al capturar verificación:', err);
             Alert.alert('Error', err.message);
         } finally {
             setIsActionLoading(false);
@@ -155,6 +175,7 @@ export default function AdminDashboard() {
             if (error) throw error;
 
             Alert.alert('Ban Levantado', 'El usuario ya puede acceder nuevamente a la plataforma.');
+            await logAdminAction('unban_user', selectedUser.id, 'user', { full_name: selectedUser.full_name });
             setShowUserModal(false);
             fetchData();
         } catch (err: any) {
@@ -192,6 +213,11 @@ export default function AdminDashboard() {
             if (error) throw error;
 
             Alert.alert('Usuario Baneado', `El usuario ha sido suspendido por ${days} días.`);
+            await logAdminAction('ban_user', selectedUser.id, 'user', {
+                full_name: selectedUser.full_name,
+                duration_days: days,
+                reason: banReason
+            });
             setBanDuration('');
             setBanReason('');
             setShowUserModal(false);
@@ -206,6 +232,21 @@ export default function AdminDashboard() {
     const fetchData = async () => {
         try {
             setLoading(true);
+
+            // Fetch open tickets count (Always fetch for notification dot)
+            const { count: supportCount, error: supportErr } = await supabase
+                .from('support_tickets')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'open');
+
+            if (supportErr) {
+                console.error('[Admin] Error al obtener el conteo de soporte:', supportErr);
+                // If table is missing, this will fail. We set to 0 to avoid crashing.
+                setOpenTicketsCount(0);
+            } else {
+                setOpenTicketsCount(supportCount || 0);
+            }
+
             // Fetch announcements (Dashboard)
             if (activeTab === 'dashboard') {
                 const { data: annData } = await supabase
@@ -236,6 +277,44 @@ export default function AdminDashboard() {
                 // Fetch WhatsApp Metrics
                 const { count: waCount } = await supabase.from('product_contacts').select('*', { count: 'exact', head: true });
                 setWhatsappContactsCount(waCount || 0);
+
+                const { count: confirmedCount } = await supabase.from('product_contacts').select('*', { count: 'exact', head: true }).eq('status', 'confirmed');
+                setConfirmedContactsCount(confirmedCount || 0);
+
+                if (waCount && waCount > 0) {
+                    setConversionRate(((confirmedCount || 0) / waCount) * 100);
+                }
+
+                // Fetch Top Products
+                const { data: topProds } = await supabase
+                    .from('products')
+                    .select('id, title, view_count, price')
+                    .order('view_count', { ascending: false })
+                    .limit(5);
+                setTopProducts(topProds || []);
+
+                // Fetch Top Sellers (by confirmed sales)
+                const { data: confirmedSales } = await supabase
+                    .from('product_contacts')
+                    .select('merchant_id')
+                    .eq('status', 'confirmed');
+
+                if (confirmedSales && confirmedSales.length > 0) {
+                    const sellerSalesMap: Record<string, number> = {};
+                    confirmedSales.forEach(s => {
+                        sellerSalesMap[s.merchant_id] = (sellerSalesMap[s.merchant_id] || 0) + 1;
+                    });
+
+                    const sortedSellerIds = Object.keys(sellerSalesMap).sort((a, b) => sellerSalesMap[b] - sellerSalesMap[a]).slice(0, 5);
+                    const { data: sellersInfo } = await supabase.from('profiles').select('id, full_name').in('id', sortedSellerIds);
+
+                    const topSellersList = sortedSellerIds.map(id => ({
+                        id,
+                        full_name: sellersInfo?.find(s => s.id === id)?.full_name || 'Desconocido',
+                        sales_count: sellerSalesMap[id]
+                    }));
+                    setTopSellers(topSellersList);
+                }
             }
 
             // Fetch Online Count (Always)
@@ -291,24 +370,24 @@ export default function AdminDashboard() {
                 if (!error) {
                     setReports(data || []);
                 } else {
-                    console.log('product_reports table might not exist yet:', error.message);
+                    console.log('La tabla product_reports podría no existir aún:', error.message);
                     setReports([]);
                 }
             }
 
             // Fetch Users
             if (activeTab === 'users') {
-                console.log('[Admin] Fetching all users...');
+                console.log('[Admin] Obteniendo todos los usuarios...');
                 let query = supabase.from('profiles').select('*').order('last_seen', { ascending: false });
                 if (searchQuery) {
                     query = query.or(`full_name.ilike.%${searchQuery}%,role.ilike.%${searchQuery}%`);
                 }
                 const { data: userData, error } = await query;
-                if (error) console.error('[Admin] Error fetching users:', error);
+                if (error) console.error('[Admin] Error al obtener usuarios:', error);
 
                 if (userData && userData.length > 0) {
-                    console.log('[Admin] First user sample:', JSON.stringify(userData[0], null, 2));
-                    console.log('[Admin] Check for ban fields in data:', {
+                    console.log('[Admin] Muestra del primer usuario:', JSON.stringify(userData[0], null, 2));
+                    console.log('[Admin] Verificar campos de baneo en los datos:', {
                         has_banned_until: 'banned_until' in userData[0],
                         has_ban_reason: 'ban_reason' in userData[0]
                     });
@@ -387,6 +466,21 @@ export default function AdminDashboard() {
                 setBanners(data || []);
             }
 
+
+            // Fetch Audit Logs
+            if (activeTab === 'audit') {
+                const { data, error } = await supabase
+                    .from('admin_audit_logs')
+                    .select('*, profiles!admin_id(full_name)')
+                    .order('created_at', { ascending: false });
+
+                if (!error) {
+                    setAuditLogs(data || []);
+                } else {
+                    console.error('[Admin] Error al obtener logs de auditoría:', error);
+                }
+            }
+
         } catch (err) {
             console.error('Error fetching admin data:', err);
         } finally {
@@ -445,7 +539,16 @@ export default function AdminDashboard() {
 
             if (error) throw error;
 
-            Alert.alert('¡Éxito!', 'Notificación global enviada correctamente.');
+            Alert.alert('¡Éxito!', 'Notificación enviada correctamente.');
+            await logAdminAction('broadcast_announcement', undefined, 'system', { title: title.trim() });
+
+            // Send real push notifications to everyone
+            broadcastPushNotification(
+                `📢 ${title.trim()}`,
+                content.trim(),
+                { type: 'broadcast' }
+            );
+
             setTitle('');
             setContent('');
             fetchData();
@@ -491,6 +594,7 @@ export default function AdminDashboard() {
                             const { error } = await supabase.from('profiles').delete().eq('id', userId);
                             if (error) throw error;
                             Alert.alert('Eliminado', 'Usuario eliminado correctamente.');
+                            await logAdminAction('delete_user', userId, 'user');
                             fetchData();
                         } catch (err: any) {
                             Alert.alert('Error', err.message);
@@ -517,6 +621,7 @@ export default function AdminDashboard() {
                             setIsActionLoading(true);
                             const { error } = await supabase.from('products').delete().eq('id', productId);
                             if (error) throw error;
+                            await logAdminAction('delete_product', productId, 'product');
                             fetchData();
                         } catch (err: any) {
                             Alert.alert('Error', err.message);
@@ -556,7 +661,7 @@ export default function AdminDashboard() {
                 }
             }
         } catch (err) {
-            console.error('[Picker] Error picking image:', err);
+            console.error('[Selector] Error al seleccionar imagen:', err);
         } finally {
             setPickingImage(false);
         }
@@ -629,7 +734,7 @@ export default function AdminDashboard() {
                         resolve(xhr.response);
                     };
                     xhr.onerror = function (e) {
-                        console.error('[XHR] Error reading local file:', e);
+                        console.error('[XHR] Error al leer el archivo local:', e);
                         reject(new TypeError("Error al leer el archivo local para subirlo."));
                     };
                     xhr.responseType = "blob";
@@ -667,7 +772,7 @@ export default function AdminDashboard() {
             fetchData();
             Alert.alert('Éxito', 'Banner creado correctamente.');
         } catch (err: any) {
-            console.error('[CreateBanner] Error:', err);
+            console.error('[CrearBanner] Error:', err);
             Alert.alert('Error', err.message);
         } finally {
             setIsActionLoading(false);
@@ -733,7 +838,7 @@ export default function AdminDashboard() {
                     text: newState ? 'Activar Mantenimiento' : 'Desactivar',
                     style: newState ? 'destructive' : 'default',
                     onPress: async () => {
-                        console.log('[Admin] Toggling maintenance. Current:', maintenanceEnabled, 'Target:', newState);
+                        console.log('[Admin] Cambiando mantenimiento. Actual:', maintenanceEnabled, 'Target:', newState);
                         try {
                             const { data, error } = await supabase
                                 .from('app_config')
@@ -748,9 +853,10 @@ export default function AdminDashboard() {
 
                             if (error) throw error;
                             setMaintenanceEnabled(newState);
+                            await logAdminAction('toggle_maintenance', undefined, 'system', { enabled: newState });
                             Alert.alert('Configuración Actualizada', `Modo mantenimiento ${newState ? 'ACTIVADO' : 'DESACTIVADO'}.`);
                         } catch (err: any) {
-                            console.error('[Admin] Toggle Maintenance Error:', err);
+                            console.error('[Admin] Error al cambiar Mantenimiento:', err);
                             Alert.alert('Error', err.message);
                         }
                     }
@@ -785,7 +891,7 @@ export default function AdminDashboard() {
             Alert.alert('¡Enviado!', `Notificación enviada exitosamente a ${selectedUser.full_name}.`);
             setTargetedMessage('');
         } catch (err: any) {
-            console.error('[Admin] Error sending targeted alert:', err);
+            console.error('[Admin] Error al enviar alerta dirigida:', err);
             Alert.alert('Error', 'No se pudo enviar la notificación: ' + err.message);
         } finally {
             setIsActionLoading(false);
@@ -794,8 +900,8 @@ export default function AdminDashboard() {
 
     const handleToggleFeatured = async (productId: string, currentState: boolean) => {
         try {
-            console.log('--- FEATURE TOGGLE START ---');
-            console.log('ID:', productId, 'Current:', currentState);
+            console.log('--- INICIO CAMBIO DE DESTACADO ---');
+            console.log('ID:', productId, 'Actual:', currentState);
             setIsActionLoading(true);
 
             const { data, error } = await supabase
@@ -804,31 +910,31 @@ export default function AdminDashboard() {
                 .eq('id', productId)
                 .select();
 
-            console.log('Supabase Update response:', { data, error });
+            console.log('Respuesta de actualización de Supabase:', { data, error });
 
             if (error) {
-                console.error('Update error detail:', error);
+                console.error('Detalle del error de actualización:', error);
                 throw error;
             }
 
             if (!data || data.length === 0) {
-                console.log('Warning: No rows updated. Check if ID exists and RLS allows updates.');
+                console.log('Aviso: No se actualizaron filas. Verifique si el ID existe y RLS permite actualizaciones.');
                 Alert.alert('Aviso de Admin', 'No se actualizó ningún registro. Verifica que el producto exista y tengas permisos.');
             } else {
-                console.log('Update successful, new state:', data[0].is_featured);
+                console.log('Actualización exitosa, nuevo estado:', data[0].is_featured);
                 Alert.alert('Sistema de Admin', `El producto se ha ${!currentState ? 'DESTACADO' : 'QUITADO DE DESTACADOS'} correctamente.`);
             }
 
             // Re-fetch to update UI
             await fetchData();
         } catch (err: any) {
-            console.error('Feature toggle error:', err);
+            console.error('Error al cambiar destacado:', err);
             Alert.alert(
                 'Error al Destacar',
                 'No se pudo actualizar el estado.\n\nIMPORTANTE: Es probable que necesites ejecutar el siguiente comando en el SQL Editor de Supabase:\n\nALTER TABLE products ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE;'
             );
         } finally {
-            console.log('--- FEATURE TOGGLE END ---');
+            console.log('--- FIN CAMBIO DE DESTACADO ---');
             setIsActionLoading(false);
         }
     };
@@ -836,7 +942,7 @@ export default function AdminDashboard() {
     const handleDeleteAnnouncement = async (id: string) => {
         Alert.alert(
             'Eliminar Notificación',
-            '¿Estás seguro de que quieres eliminar este anuncio global?',
+            '¿Estás seguro de que quieres eliminar este anuncio?',
             [
                 { text: 'Cancelar', style: 'cancel' },
                 {
@@ -928,6 +1034,66 @@ export default function AdminDashboard() {
         }
     };
 
+    const handleRankProductClick = async (productId: string) => {
+        try {
+            setIsActionLoading(true);
+            // Fetch product first
+            const { data: product, error: pError } = await supabase
+                .from('products')
+                .select('*')
+                .eq('id', productId)
+                .single();
+
+            if (pError) throw pError;
+
+            if (product) {
+                // Fetch seller details manually to avoid join/relationship errors
+                const { data: profile, error: uError } = await supabase
+                    .from('profiles')
+                    .select('full_name')
+                    .eq('id', product.user_id)
+                    .single();
+
+                // Format the object to match what the modal expects
+                const formattedProduct = {
+                    ...product,
+                    profiles: { full_name: profile?.full_name || 'Desconocido' }
+                };
+
+                setSelectedProduct(formattedProduct);
+                setShowProductModal(true);
+            }
+        } catch (err: any) {
+            console.error('Error al seleccionar producto destacado:', err);
+            Alert.alert('Error', 'No se pudo cargar el detalle del producto: ' + err.message);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+
+    const handleRankSellerClick = async (sellerId: string) => {
+        try {
+            setIsActionLoading(true);
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', sellerId)
+                .single();
+
+            if (error) throw error;
+            if (data) {
+                setSelectedUser(data);
+                setShowUserModal(true);
+            }
+        } catch (err) {
+            console.error('Error al seleccionar vendedor destacado:', err);
+            Alert.alert('Error', 'No se pudo cargar el detalle del perfil.');
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
     return (
         <SafeAreaView edges={['top']} style={styles.container}>
             <View style={styles.header}>
@@ -1011,6 +1177,13 @@ export default function AdminDashboard() {
                         <ImageIcon size={18} color={activeTab === 'banners' ? '#8b5cf6' : '#94A3B8'} />
                         <Text style={[styles.tabText, activeTab === 'banners' && styles.activeTabText]}>Banners</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                        onPress={() => setActiveTab('audit')}
+                        style={[styles.tabItem, activeTab === 'audit' && styles.activeTabItem]}
+                    >
+                        <ShieldCheck size={18} color={activeTab === 'audit' ? '#8b5cf6' : '#94A3B8'} />
+                        <Text style={[styles.tabText, activeTab === 'audit' && styles.activeTabText]}>Auditoría</Text>
+                    </TouchableOpacity>
                 </ScrollView>
             </View>
 
@@ -1035,13 +1208,23 @@ export default function AdminDashboard() {
                                 <Text style={styles.statValueSmall}>{onlineCount}</Text>
                                 <Text style={styles.statLabelSmall}>Online Ahora</Text>
                             </View>
-                            <View style={[styles.statCardSmall, { backgroundColor: '#F5F3FF', borderColor: '#DDD6FE' }]}>
-                                <DollarSign size={16} color="#7C3AED" />
+                            <View style={[styles.statCardSmall, { backgroundColor: '#F5F5FF', borderColor: '#E0E7FF' }]}>
+                                <BadgeCheck size={16} color="#6366F1" />
+                                <Text style={styles.statValueSmall}>{confirmedContactsCount}</Text>
+                                <Text style={styles.statLabelSmall}>Ventas</Text>
+                            </View>
+                            <View style={[styles.statCardSmall, { backgroundColor: '#FFFBEB', borderColor: '#FEF3C7' }]}>
+                                <TrendingUp size={16} color="#D97706" />
+                                <Text style={styles.statValueSmall}>{conversionRate.toFixed(1)}%</Text>
+                                <Text style={styles.statLabelSmall}>Éxito</Text>
+                            </View>
+                            <View style={[styles.statCardSmall, { backgroundColor: '#FDF2F8', borderColor: '#FCE7F3' }]}>
+                                <DollarSign size={16} color="#DB2777" />
                                 <Text style={styles.statValueSmall}>${(economicVolume / 1000).toFixed(1)}k</Text>
                                 <Text style={styles.statLabelSmall}>V. Mercado</Text>
                             </View>
-                            <View style={[styles.statCardSmall, { backgroundColor: '#FFF7ED', borderColor: '#FFEDD5' }]}>
-                                <Phone size={16} color="#EA580C" />
+                            <View style={[styles.statCardSmall, { backgroundColor: '#F0FDFA', borderColor: '#CCFBF1' }]}>
+                                <Phone size={16} color="#0D9488" />
                                 <Text style={styles.statValueSmall}>{whatsappContactsCount}</Text>
                                 <Text style={styles.statLabelSmall}>WhatsApp</Text>
                             </View>
@@ -1125,6 +1308,56 @@ export default function AdminDashboard() {
                                         </>
                                     )}
                                 </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* Ranking Section */}
+                        <View className="mt-10">
+                            <View className="flex-row items-center mb-6">
+                                <View className="w-10 h-10 bg-amber-50 rounded-2xl items-center justify-center mr-3">
+                                    <Trophy size={20} color="#D97706" />
+                                </View>
+                                <View>
+                                    <Text className="text-slate-900 font-black text-lg">Ranking de Rendimiento</Text>
+                                    <Text className="text-slate-400 text-xs font-bold uppercase tracking-widest">Top Desempeño</Text>
+                                </View>
+                            </View>
+
+                            <View className="flex-row justify-between">
+                                <View style={[styles.rankingCard, { marginRight: 8 }]}>
+                                    <Text style={styles.rankingTitle}>Top 5 Productos</Text>
+                                    {topProducts.map((p, i) => (
+                                        <TouchableOpacity
+                                            key={p.id}
+                                            style={styles.rankingItem}
+                                            onPress={() => handleRankProductClick(p.id)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={styles.rankingNumber}>{i + 1}</Text>
+                                            <View className="flex-1">
+                                                <Text numberOfLines={1} style={styles.rankingName}>{p.title}</Text>
+                                                <Text style={styles.rankingValue}>{p.view_count || 0} vistas</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                                <View style={[styles.rankingCard, { marginLeft: 8 }]}>
+                                    <Text style={styles.rankingTitle}>Top 5 Vendedores</Text>
+                                    {topSellers.map((s, i) => (
+                                        <TouchableOpacity
+                                            key={s.id}
+                                            style={styles.rankingItem}
+                                            onPress={() => handleRankSellerClick(s.id)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text style={styles.rankingNumber}>{i + 1}</Text>
+                                            <View className="flex-1">
+                                                <Text numberOfLines={1} style={styles.rankingName}>{s.full_name}</Text>
+                                                <Text style={styles.rankingValue}>{s.sales_count} ventas</Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
                             </View>
                         </View>
 
@@ -1384,32 +1617,95 @@ export default function AdminDashboard() {
                     </View>
                 )}
 
+                {activeTab === 'audit' && (
+                    <View>
+                        {auditLogs.length > 0 ? (
+                            auditLogs.map((log) => (
+                                <View key={log.id} style={styles.activityItem}>
+                                    <View style={[styles.activityIcon, { backgroundColor: '#F8FAFC' }]}>
+                                        <Activity size={16} color="#64748B" />
+                                    </View>
+                                    <View className="flex-1 ml-3">
+                                        <Text className="text-slate-900 font-bold text-sm">
+                                            {log.profiles?.full_name || 'Admin'}: <Text className="font-black text-brand-600">{log.action.toUpperCase().replace('_', ' ')}</Text>
+                                        </Text>
+                                        {log.details && (
+                                            <Text className="text-slate-500 text-xs mt-0.5">
+                                                {log.details.full_name ? `Usuario: ${log.details.full_name}` :
+                                                    log.details.reason ? `Motivo: ${log.details.reason}` :
+                                                        JSON.stringify(log.details)}
+                                            </Text>
+                                        )}
+                                        <View className="flex-row items-center mt-1">
+                                            <Clock size={10} color="#94A3B8" />
+                                            <Text className="text-slate-400 text-[10px] font-bold uppercase ml-1">
+                                                {new Date(log.created_at).toLocaleTimeString()} · {new Date(log.created_at).toLocaleDateString()}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            ))
+                        ) : (
+                            <View className="items-center py-20">
+                                <ShieldCheck size={48} color="#CBD5E1" />
+                                <Text className="text-slate-400 font-bold mt-4">Historial de auditoría vacío</Text>
+                                <Text className="text-slate-300 text-xs mt-2 text-center px-10">Asegúrate de haber creado la tabla `admin_audit_logs` en Supabase.</Text>
+                            </View>
+                        )}
+                    </View>
+                )}
+
+
                 {activeTab === 'gallery' && (
                     <View style={styles.galleryGrid}>
                         {galleryProducts.length > 0 ? (
                             galleryProducts.map(prod => (
-                                <TouchableOpacity
-                                    key={prod.id}
-                                    style={styles.galleryItem}
-                                    onPress={() => {
-                                        setSelectedProduct(prod);
-                                        setShowProductModal(true);
-                                    }}
-                                >
-                                    <View style={styles.galleryImageContainer}>
-                                        <View style={styles.galleryImagePlaceholder}>
-                                            <ImageIcon size={24} color="#CBD5E1" />
+                                <View key={prod.id} style={styles.galleryItem}>
+                                    <TouchableOpacity
+                                        activeOpacity={0.9}
+                                        onPress={() => {
+                                            setSelectedProduct(prod);
+                                            setShowProductModal(true);
+                                        }}
+                                    >
+                                        <View style={styles.galleryImageContainer}>
+                                            <View style={styles.galleryImagePlaceholder}>
+                                                <ImageIcon size={24} color="#CBD5E1" />
+                                            </View>
+                                            {prod.image_url ? (
+                                                <Image
+                                                    source={{ uri: prod.image_url }}
+                                                    style={StyleSheet.absoluteFill}
+                                                    resizeMode="cover"
+                                                />
+                                            ) : null}
+
+                                            {/* Action Overlays */}
+                                            <View style={styles.galleryActions}>
+                                                <TouchableOpacity
+                                                    onPress={() => handleToggleFeatured(prod.id, !!prod.is_featured)}
+                                                    style={[styles.galleryActionBtn, prod.is_featured ? styles.galleryActionActive : styles.galleryActionInactive]}
+                                                >
+                                                    <Star size={14} color={prod.is_featured ? 'white' : '#94A3B8'} fill={prod.is_featured ? 'white' : 'transparent'} />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    onPress={() => handleDeleteProduct(prod.id)}
+                                                    style={[styles.galleryActionBtn, styles.galleryDeleteBtn]}
+                                                >
+                                                    <Trash2 size={14} color="#EF4444" />
+                                                </TouchableOpacity>
+                                            </View>
+
+                                            {prod.is_featured && (
+                                                <View style={styles.featuredBadge}>
+                                                    <Sparkles size={8} color="white" />
+                                                    <Text style={styles.featuredBadgeText}>TOP</Text>
+                                                </View>
+                                            )}
                                         </View>
-                                        {prod.image_url ? (
-                                            <Image
-                                                source={{ uri: prod.image_url }}
-                                                style={StyleSheet.absoluteFill}
-                                                resizeMode="cover"
-                                            />
-                                        ) : null}
-                                    </View>
-                                    <Text numberOfLines={1} style={styles.galleryText}>{prod.title}</Text>
-                                </TouchableOpacity>
+                                        <Text numberOfLines={1} style={styles.galleryText}>{prod.title}</Text>
+                                    </TouchableOpacity>
+                                </View>
                             ))
                         ) : (
                             <View className="items-center py-20 w-full">
@@ -1928,6 +2224,7 @@ export default function AdminDashboard() {
                     </View>
                 </View>
             </Modal>
+
         </SafeAreaView>
     );
 }
@@ -2178,10 +2475,50 @@ const styles = StyleSheet.create({
     detailRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F8FAFC',
+        marginBottom: 24,
+    },
+    rankingCard: {
+        flex: 1,
+        backgroundColor: 'white',
         padding: 16,
         borderRadius: 24,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.02,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    rankingTitle: {
+        fontSize: 12,
+        fontWeight: '900',
+        color: '#64748B',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginBottom: 16,
+    },
+    rankingItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
         marginBottom: 12,
+    },
+    rankingNumber: {
+        fontSize: 14,
+        fontWeight: '900',
+        color: '#8b5cf6',
+        width: 24,
+    },
+    rankingName: {
+        fontSize: 13,
+        fontWeight: 'bold',
+        color: '#0F172A',
+    },
+    rankingValue: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#94A3B8',
+        textTransform: 'uppercase',
     },
     detailIcon: {
         width: 40,
@@ -2291,9 +2628,112 @@ const styles = StyleSheet.create({
         borderColor: '#E2E8F0',
     },
     featuredBtnText: {
-        fontSize: 10,
-        fontWeight: '900',
-        color: '#94A3B8',
         marginLeft: 6,
-    }
+    },
+    galleryActions: {
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        flexDirection: 'row',
+        gap: 6,
+    },
+    galleryActionBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    galleryActionActive: {
+        backgroundColor: '#F59E0B',
+        borderColor: '#F59E0B',
+    },
+    galleryActionInactive: {
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        borderColor: '#E2E8F0',
+    },
+    galleryDeleteBtn: {
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        borderColor: '#FEE2E2',
+    },
+    featuredBadge: {
+        position: 'absolute',
+        bottom: 8,
+        left: 8,
+        backgroundColor: '#8b5cf6',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+    },
+    featuredBadgeText: {
+        color: 'white',
+        fontSize: 8,
+        fontWeight: '900',
+        letterSpacing: 0.5,
+    },
+    ticketItem: {
+        backgroundColor: 'white',
+        borderRadius: 24,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#F1F5F9',
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    statusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        alignSelf: 'flex-start',
+        marginTop: 4,
+    },
+    statusBadgeText: {
+        fontSize: 9,
+        fontWeight: '900',
+        textTransform: 'uppercase',
+    },
+    ticketTitle: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#0F172A',
+    },
+    ticketSender: {
+        fontSize: 11,
+        color: '#64748B',
+        marginTop: 2,
+    },
+    ticketModalContent: {
+        backgroundColor: 'white',
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
+        padding: 24,
+        maxHeight: '90%',
+    },
+    replyInput: {
+        backgroundColor: '#F8FAFC',
+        borderRadius: 20,
+        padding: 16,
+        minHeight: 120,
+        textAlignVertical: 'top',
+        marginTop: 16,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    primaryButton: {
+        height: 52,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+    },
 });

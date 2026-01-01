@@ -136,7 +136,7 @@ export default function MerchantProfileScreen() {
                 });
                 setProducts(formattedProducts);
             } catch (error) {
-                console.error('Error fetching merchant data:', error);
+                console.error('[PerfilComerciante] Error al obtener datos:', error);
                 Alert.alert('Error', 'No pudimos cargar el perfil del comerciante');
             } finally {
                 setLoading(false);
@@ -159,7 +159,7 @@ export default function MerchantProfileScreen() {
                     setUserRole(data?.role || 'client');
                 }
             } catch (err) {
-                console.log('[Merchant Screen] Role check silent fail');
+                console.log('[PerfilComerciante] Verificación de rol fallida (silenciosa)');
                 setUserRole('client');
             }
         }
@@ -209,7 +209,7 @@ export default function MerchantProfileScreen() {
                 }
             }
         } catch (err) {
-            console.error('Error registering contact:', err);
+            console.error('[PerfilComerciante] Error al registrar contacto:', err);
         }
 
         const cleanNumber = product.whatsapp_number.replace(/[^0-9]/g, '');
@@ -278,7 +278,7 @@ export default function MerchantProfileScreen() {
                 });
             }
         } catch (err) {
-            console.error('[Chat] Error initializing conversation:', err);
+            console.error('[Chat] Error al inicializar conversación:', err);
             Alert.alert('Error', 'No pudimos iniciar el chat. Inténtalo de nuevo.');
         }
     };
@@ -313,7 +313,7 @@ export default function MerchantProfileScreen() {
                 }
             }
         } catch (err) {
-            console.error('Toggle follow error:', err);
+            console.error('[PerfilComerciante] Error al cambiar seguimiento:', err);
         } finally {
             setLoadingFollow(false);
         }

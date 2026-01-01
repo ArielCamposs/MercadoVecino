@@ -14,6 +14,7 @@ import {
   HelpCircle,
   LayoutGrid,
   LogOut,
+  MessageCircle,
   Package,
   Settings,
   Shield,
@@ -93,6 +94,11 @@ export default function ProfileScreen() {
     todayContacts: 0,
     topProducts: [] as { title: string, count: number }[]
   });
+  const [myTickets, setMyTickets] = useState<any[]>([]);
+  const [isSupportModalVisible, setIsSupportModalVisible] = useState(false);
+  const [ticketSubject, setTicketSubject] = useState('');
+  const [ticketMessage, setTicketMessage] = useState('');
+  const [submittingTicket, setSubmittingTicket] = useState(false);
 
   async function fetchBusinessMetrics(userId: string) {
     try {
@@ -143,7 +149,7 @@ export default function ProfileScreen() {
       });
 
     } catch (err) {
-      console.error('Error fetching business metrics:', err);
+      console.error('[Perfil] Error al obtener métricas de negocio:', err);
     }
   }
 
@@ -176,7 +182,7 @@ export default function ProfileScreen() {
 
         // If profile doesn't exist (PGRST116), create a default one
         if (profileError && profileError.code === 'PGRST116') {
-          console.log('[TwoScreen] Profile missing, creating default...');
+          console.log('[Perfil] El perfil no existe, creando uno por defecto...');
           const { data: newData, error: createError } = await supabase
             .from('profiles')
             .insert({
@@ -199,6 +205,7 @@ export default function ProfileScreen() {
           setNewName(data.full_name || '');
           setNewAvatar(data.avatar_url || null);
           fetchHistories(user.id, data.role);
+          fetchMyTickets(user.id);
           if (data.role?.toLowerCase().trim() === 'vendor') {
             fetchPendingSales(user.id);
             fetchBusinessMetrics(user.id);
@@ -206,7 +213,7 @@ export default function ProfileScreen() {
         }
       }
     } catch (err: any) {
-      console.log('[ProfileScreen] Profile fetch error:', err);
+      console.log('[Perfil] Error al obtener el perfil:', err);
       Alert.alert(
         'Error de Conexión',
         `No pudimos cargar tu perfil. Detalle: ${err.message || 'Error desconocido'}`
@@ -244,7 +251,7 @@ export default function ProfileScreen() {
         setPendingSales(contacts || []);
       }
     } catch (err) {
-      console.error('Error fetching sales:', err);
+      console.error('[Perfil] Error al obtener ventas:', err);
     } finally {
       setFetchingSales(false);
     }
@@ -336,9 +343,55 @@ export default function ProfileScreen() {
         }
       }
     } catch (err) {
-      console.error('Error fetching histories:', err);
+      console.error('[Perfil] Error al obtener historiales:', err);
     }
   }
+
+  async function fetchMyTickets(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      if (!error) setMyTickets(data || []);
+    } catch (err) {
+      console.error('[Perfil] Error al obtener tickets:', err);
+    }
+  }
+
+  const handleSubmitTicket = async () => {
+    if (!ticketSubject.trim() || !ticketMessage.trim()) {
+      Alert.alert('Error', 'Por favor completa todos los campos.');
+      return;
+    }
+
+    try {
+      setSubmittingTicket(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Sesión no encontrada');
+
+      const { error } = await supabase
+        .from('support_tickets')
+        .insert({
+          user_id: user.id,
+          subject: ticketSubject.trim(),
+          message: ticketMessage.trim()
+        });
+
+      if (error) throw error;
+
+      Alert.alert('Éxito', 'Tu ticket ha sido enviado correctamente. Revisaremos tu caso pronto.');
+      setTicketSubject('');
+      setTicketMessage('');
+      setIsSupportModalVisible(false);
+      fetchMyTickets(user.id);
+    } catch (err: any) {
+      Alert.alert('Error', err.message);
+    } finally {
+      setSubmittingTicket(false);
+    }
+  };
 
   async function updateOrderStatus(contactId: string, newStatus: string) {
     try {
@@ -461,7 +514,7 @@ export default function ProfileScreen() {
       setIsEditModalVisible(false);
       fetchProfile();
     } catch (error: any) {
-      console.error('Update error:', error);
+      console.error('[Perfil] Error de actualización:', error);
       Alert.alert('Error', error.message || 'No se pudo actualizar el perfil');
     } finally {
       setUpdating(false);
@@ -488,7 +541,7 @@ export default function ProfileScreen() {
               }
               supabase.auth.signOut().catch(() => { });
             } catch (err: any) {
-              console.log('Signout error (ignored):', err.message);
+              console.log('[Perfil] Error al cerrar sesión (ignorado):', err.message);
               DeviceEventEmitter.emit('force-logout');
             }
           }
@@ -795,14 +848,17 @@ export default function ProfileScreen() {
           <Text className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-4 ml-4">Soporte</Text>
           <View className="bg-white rounded-[32px] overflow-hidden shadow-sm border border-slate-100 mb-8">
             <TouchableOpacity
-              onPress={() => Alert.alert('Centro de Ayuda', 'Próximamente: FAQ y soporte vecinal')}
+              onPress={() => setIsSupportModalVisible(true)}
               activeOpacity={0.6}
-              className="flex-row items-center p-5"
+              className="flex-row items-center p-5 border-b border-slate-50"
             >
-              <View className="w-10 h-10 bg-slate-100 rounded-2xl items-center justify-center mr-4">
-                <HelpCircle size={20} color="#475569" />
+              <View className="w-10 h-10 bg-brand-50 rounded-2xl items-center justify-center mr-4">
+                <HelpCircle size={20} color="#8b5cf6" />
               </View>
-              <Text className="flex-1 text-slate-700 font-bold">Centro de Ayuda</Text>
+              <View className="flex-1">
+                <Text className="text-slate-700 font-bold">Ayuda y Soporte</Text>
+                <Text className="text-slate-400 text-[10px] font-medium">Contacta con administración</Text>
+              </View>
               <ChevronRight size={20} color="#cbd5e1" />
             </TouchableOpacity>
 
@@ -899,6 +955,112 @@ export default function ProfileScreen() {
                   </>
                 )}
               </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Support Ticket Modal */}
+      <Modal
+        visible={isSupportModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setIsSupportModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View className="bg-white rounded-t-[50px] p-8 h-[90%]">
+            <View className="flex-row justify-between items-center mb-8">
+              <View>
+                <Text className="text-3xl font-black text-slate-900">Soporte</Text>
+                <Text className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mt-1">Centro de Ayuda</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsSupportModalVisible(false)} className="w-10 h-10 bg-slate-100 rounded-full items-center justify-center">
+                <X size={24} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+              <View className="bg-brand-50 p-6 rounded-[32px] border border-brand-100 mb-8">
+                <Text className="text-brand-900 font-black text-base mb-2">¿Cómo podemos ayudarte?</Text>
+                <Text className="text-brand-600 text-xs font-medium leading-relaxed">
+                  Envíanos un mensaje y el equipo de administración te responderá lo antes posible.
+                </Text>
+              </View>
+
+              <View className="space-y-6">
+                <View>
+                  <Text className="text-slate-700 font-bold mb-3 ml-2">Asunto</Text>
+                  <TextInput
+                    value={ticketSubject}
+                    onChangeText={setTicketSubject}
+                    placeholder="Ej: Problema con un pedido"
+                    placeholderTextColor="#94A3B8"
+                    className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-slate-900 font-bold"
+                  />
+                </View>
+
+                <View>
+                  <Text className="text-slate-700 font-bold mb-3 ml-2">Mensaje</Text>
+                  <TextInput
+                    value={ticketMessage}
+                    onChangeText={setTicketMessage}
+                    placeholder="Describe tu problema en detalle..."
+                    placeholderTextColor="#94A3B8"
+                    multiline
+                    numberOfLines={6}
+                    textAlignVertical="top"
+                    style={{ minHeight: 150 }}
+                    className="bg-slate-50 p-5 rounded-3xl border border-slate-100 text-slate-900 font-bold"
+                  />
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleSubmitTicket}
+                  disabled={submittingTicket}
+                  activeOpacity={0.8}
+                  style={{ marginTop: 20 }}
+                  className={`w-full p-6 rounded-[32px] flex-row items-center justify-center shadow-xl ${submittingTicket ? 'bg-brand-400' : 'bg-brand-600'}`}
+                >
+                  {submittingTicket ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <>
+                      <MessageCircle size={24} color="white" />
+                      <Text className="text-white font-black text-xl ml-3">Enviar Ticket</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* My Tickets List */}
+              {myTickets.length > 0 && (
+                <View style={{ marginTop: 40 }}>
+                  <Text className="text-slate-900 font-black text-xl mb-6">Mis Tickets</Text>
+                  {myTickets.map((ticket) => (
+                    <View key={ticket.id} className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 mb-4">
+                      <View className="flex-row justify-between items-start mb-2">
+                        <Text className="text-slate-900 font-bold text-base flex-1 mr-2">{ticket.subject}</Text>
+                        <View className={`px-3 py-1 rounded-full ${ticket.status === 'open' ? 'bg-red-100' : ticket.status === 'resolved' ? 'bg-green-100' : 'bg-brand-100'}`}>
+                          <Text className={`text-[9px] font-black uppercase ${ticket.status === 'open' ? 'text-red-600' : ticket.status === 'resolved' ? 'text-green-600' : 'text-brand-600'}`}>
+                            {ticket.status === 'open' ? 'Abierto' : ticket.status === 'resolved' ? 'Resuelto' : 'En Proceso'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text className="text-slate-500 text-xs mb-4">{ticket.message}</Text>
+
+                      {ticket.admin_reply && (
+                        <View className="bg-white p-4 rounded-2xl border border-slate-100 mt-2">
+                          <Text className="text-brand-600 font-black text-[9px] uppercase tracking-widest mb-2">Respuesta de Admin:</Text>
+                          <Text className="text-slate-700 text-xs italic">{ticket.admin_reply}</Text>
+                        </View>
+                      )}
+                      <Text className="text-slate-300 text-[9px] font-bold uppercase mt-4">
+                        {new Date(ticket.created_at).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>

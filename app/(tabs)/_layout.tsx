@@ -3,10 +3,12 @@ import { Heart, Home, MessageCircle, PlusCircle, User } from 'lucide-react-nativ
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNotifications } from '../../hooks/useNotifications';
 import { supabase } from '../../lib/supabase';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  useNotifications();
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [unreadCount, setUnreadCount] = useState<number>(0);

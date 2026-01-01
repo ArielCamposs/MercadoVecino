@@ -103,7 +103,7 @@ export default function ProactiveReviewModal() {
                 setVisible(true);
             }
         } catch (err) {
-            console.error('[ProactiveReviewModal] Check error:', err);
+            console.error('[ReseñaProactiva] Error al verificar:', err);
         }
     }
 
@@ -134,7 +134,7 @@ export default function ProactiveReviewModal() {
             if (error) throw error;
             setPendingItem(null);
         } catch (err) {
-            console.error('[ProactiveReviewModal] Skip error:', err);
+            console.error('[ReseñaProactiva] Error al omitir:', err);
             // Optionally could Re-show if failure is critical, but usually better to stay hidden
         }
     }
@@ -183,7 +183,7 @@ export default function ProactiveReviewModal() {
             setComment('');
             setRating(5);
         } catch (err) {
-            console.error('[ProactiveReviewModal] Submit error:', err);
+            console.error('[ReseñaProactiva] Error al enviar:', err);
             Alert.alert('Error', 'No pudimos guardar tu reseña.');
         } finally {
             setSubmitting(false);

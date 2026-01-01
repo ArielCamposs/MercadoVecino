@@ -63,7 +63,7 @@ export default function PromptReviewModal({ visible, productId, productTitle, on
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             onSuccess();
         } catch (err) {
-            console.error('[PromptReview] Error:', err);
+            console.error('[ReseñaDirecta] Error:', err);
             Alert.alert('Error', 'No pudimos guardar tu reseña.');
         } finally {
             setSubmitting(false);

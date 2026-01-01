@@ -164,7 +164,7 @@ export default function PostScreen() {
                     }
                 }
             } catch (err: any) {
-                console.log('[PostScreen] Init hint:', err.message);
+                console.log('[Anuncio] Error al inicializar:', err.message);
             } finally {
                 setCheckingRole(false);
             }
@@ -244,7 +244,7 @@ export default function PostScreen() {
 
             return publicUrl;
         } catch (error) {
-            console.error('[Upload Error detail]', error);
+            console.error('[Subida] Detalle del error:', error);
             throw new Error('Error al subir una de las imágenes.');
         }
     };
@@ -306,7 +306,7 @@ export default function PostScreen() {
                     .eq('id', id);
 
                 if (updateError) {
-                    console.error('[Update Error]', updateError);
+                    console.error('[Anuncio] Error de actualización:', updateError);
                     throw updateError;
                 }
                 console.log('--- UPDATE SUCCESSFUL ---');
@@ -336,7 +336,7 @@ export default function PostScreen() {
                 );
             }
         } catch (error: any) {
-            console.error('[PostScreen] Submission error:', error);
+            console.error('[Anuncio] Error al enviar:', error);
             const errorMessage = error.message || 'No pudimos guardar tu producto. Por favor intenta de nuevo.';
             Alert.alert('Error al Publicar', errorMessage);
         } finally {

@@ -74,7 +74,7 @@ export default function ReviewSection({ productId, onReviewSubmitted }: ReviewSe
                     setContactStatus(null);
                 }
             } catch (e) {
-                console.error('Error checking contacts:', e);
+                console.error('[Reseñas] Error al verificar contactos:', e);
             }
         }
     }
@@ -118,7 +118,7 @@ export default function ReviewSection({ productId, onReviewSubmitted }: ReviewSe
 
             setReviews(formattedReviews);
         } catch (err) {
-            console.error('Error fetching reviews:', err);
+            console.error('[Reseñas] Error al obtener reseñas:', err);
         } finally {
             setLoading(false);
         }
@@ -168,7 +168,7 @@ export default function ReviewSection({ productId, onReviewSubmitted }: ReviewSe
                 setHasReviewed(false);
             }
         } catch (e) {
-            console.error('Error checking review eligibility:', e);
+            console.error('[Reseñas] Error al verificar elegibilidad:', e);
         }
     }
 
@@ -228,7 +228,7 @@ export default function ReviewSection({ productId, onReviewSubmitted }: ReviewSe
             Alert.alert('¡Gracias!', 'Tu reseña ha sido publicada.');
         } catch (err: any) {
             Alert.alert('Error', 'No pudimos guardar tu reseña. Inténtalo de nuevo.');
-            console.error('Review submission error:', err);
+            console.error('[Reseñas] Error al enviar reseña:', err);
         } finally {
             setSubmitting(false);
         }

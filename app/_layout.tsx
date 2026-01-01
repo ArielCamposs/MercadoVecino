@@ -35,17 +35,17 @@ function InitialLayout() {
         if (error) {
           // Si el error es por refresh token inválido, limpiamos la sesión local
           if (error.message?.includes('Refresh Token Not Found')) {
-            console.log('[InitialLayout] Stale session detected, clearing...');
+            console.log('[LayoutInicial] Sesión caducada detectada, limpiando...');
             await supabase.auth.signOut();
             setSession(null);
           } else {
-            console.error('[InitialLayout] Auth Session Error:', error);
+            console.error('[LayoutInicial] Error de Sesión Auth:', error);
           }
         } else {
           setSession(session);
         }
       } catch (err: any) {
-        console.error('[InitialLayout] Fatal Session Catch:', err);
+        console.error('[LayoutInicial] Error Fatal al capturar Sesión:', err);
       } finally {
         setInitialized(true);
       }
@@ -55,7 +55,7 @@ function InitialLayout() {
 
     // 2. Escuchar cambios de estado de auth de Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log('--- SUPABASE AUTH EVENT ---', _event, !!session);
+      console.log('--- EVENTO DE AUTH SUPABASE ---', _event, !!session);
       setSession(session);
 
       if (session?.user) {
@@ -97,18 +97,18 @@ function InitialLayout() {
     const initMaintenance = async () => {
       try {
         const { data, error } = await supabase.from('app_config').select('*').eq('key', 'maintenance_mode').single();
-        console.log('[Maintenance] Raw result:', { data, error });
+        console.log('[Mantenimiento] Resultado bruto:', { data, error });
 
         if (error) {
-          console.log('[Maintenance] Fetch error:', error.message, error.code);
+          console.log('[Mantenimiento] Error al obtener:', error.message, error.code);
           return;
         }
 
         const enabled = !!data?.value?.enabled;
-        console.log('[Maintenance] State resolved to:', enabled);
+        console.log('[Mantenimiento] Estado resuelto a:', enabled);
         setIsMaintenance(enabled);
       } catch (err) {
-        console.error('[Maintenance] Init exception:', err);
+        console.error('[Mantenimiento] Excepción inicial:', err);
       }
     };
     initMaintenance();
@@ -117,18 +117,18 @@ function InitialLayout() {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'app_config', filter: 'key=eq.maintenance_mode' },
         (payload) => {
-          console.log('[Maintenance] Realtime update:', payload.new.value);
+          console.log('[Mantenimiento] Actualización en tiempo real:', payload.new.value);
           setIsMaintenance(!!payload.new.value.enabled);
         }
       )
       .subscribe((status) => {
-        console.log('[Maintenance] Channel status:', status);
+        console.log('[Mantenimiento] Estado del canal:', status);
       });
 
 
     // 4. Listener de emergencia para forzar cierre de sesión y NAVEGACIÓN
     const logoutSub = DeviceEventEmitter.addListener('force-logout', () => {
-      console.log('!!! FORCE LOGOUT RECEIVED !!!');
+      console.log('!!! CIERRE DE SESIÓN FORZADO RECIBIDO !!!');
       setSession(null);
       // Usamos replace con una pequeña demora o asegurándonos de que esté montado
       router.replace('/(auth)/login');
@@ -155,7 +155,7 @@ function InitialLayout() {
           filter: `id=eq.${session.user.id}`
         },
         (payload) => {
-          console.log('[Realtime] Profile updated:', payload.new);
+          console.log('[TiempoReal] Perfil actualizado:', payload.new);
           const newProfile = payload.new;
 
           // Update Role
@@ -222,7 +222,7 @@ function InitialLayout() {
         .update({ last_seen: new Date().toISOString() })
         .eq('id', session.user.id)
         .then(({ error }) => {
-          if (error) console.error('[Heartbeat Error]:', error.message);
+          if (error) console.error('[Error de Latido]:', error.message);
         });
     }, 120000); // 2 minutes
 
@@ -238,10 +238,10 @@ function InitialLayout() {
     // antes de realizar redirecciones automáticas.
     const task = setTimeout(async () => {
       if (!session && !inAuthGroup) {
-        console.log('Navigating to Login...');
+        console.log('Navegando al Login...');
         router.replace('/(auth)/login');
       } else if (session && inAuthGroup) {
-        console.log('Navigating to Home...');
+        console.log('Navegando al Inicio...');
         router.replace('/(tabs)');
       }
 
@@ -255,7 +255,7 @@ function InitialLayout() {
   const isAdmin = userRole?.toLowerCase().trim() === 'admin';
 
   if (initialized) {
-    console.log('[Layout] State:', { isMaintenance, isAdmin, initialized, userRole, isBanned });
+    console.log('[Layout] Estado:', { isMaintenance, isAdmin, initialized, userRole, isBanned });
   }
 
   return (

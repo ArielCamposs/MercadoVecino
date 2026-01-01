@@ -17,6 +17,8 @@ interface ChatRoom {
         full_name: string;
         avatar_url: string;
     };
+    is_support_ticket?: boolean;
+    ticket_status?: string;
 }
 
 export default function MessagesScreen() {
@@ -68,57 +70,114 @@ export default function MessagesScreen() {
             if (!user) return;
             setCurrentUserId(user.id);
 
-            const { data: roomsData, error } = await supabase
-                .from('chat_rooms')
-                .select('*')
-                .contains('participants', [user.id])
-                .order('last_message_at', { ascending: false });
+            // Check if user is admin
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id)
+                .single();
 
-            if (error) throw error;
+            const isAdmin = profile?.role === 'admin';
 
-            if (roomsData) {
-                // Fetch unread counts for these rooms
-                const { data: unreadMessages } = await supabase
-                    .from('chat_messages')
-                    .select('room_id')
-                    .in('room_id', roomsData.map(r => r.id))
-                    .eq('is_read', false)
-                    .neq('sender_id', user.id);
+            if (isAdmin) {
+                // Fetch support tickets for admin
+                const { data: ticketsData, error } = await supabase
+                    .from('support_tickets')
+                    .select(`
+                        id,
+                        user_id,
+                        subject,
+                        message,
+                        status,
+                        created_at,
+                        updated_at,
+                        profiles:user_id (
+                            id,
+                            full_name,
+                            avatar_url
+                        )
+                    `)
+                    .order('created_at', { ascending: false });
 
-                const countMap: Record<string, number> = {};
-                unreadMessages?.forEach(msg => {
-                    countMap[msg.room_id] = (countMap[msg.room_id] || 0) + 1;
-                });
+                if (error) throw error;
 
-                // Fetch profiles for other participants
-                const otherParticipantIds = roomsData.map(room =>
-                    room.participants.find((p: string) => p !== user.id)
-                ).filter(id => !!id);
-
-                if (otherParticipantIds.length > 0) {
-                    const { data: profiles } = await supabase
-                        .from('profiles')
-                        .select('id, full_name, avatar_url')
-                        .in('id', otherParticipantIds);
-
-                    const profileLookup: Record<string, any> = {};
-                    profiles?.forEach(p => {
-                        profileLookup[p.id] = p;
+                if (ticketsData) {
+                    // Map tickets to room format
+                    const formattedRooms = ticketsData.map(ticket => {
+                        const profile = Array.isArray(ticket.profiles) ? ticket.profiles[0] : ticket.profiles;
+                        return {
+                            id: ticket.id,
+                            product_id: '', // Not applicable for support tickets
+                            participants: [user.id, ticket.user_id],
+                            last_message: ticket.subject,
+                            last_message_at: ticket.updated_at || ticket.created_at,
+                            unread_count: ticket.status === 'open' ? 1 : 0,
+                            other_participant: {
+                                id: profile?.id || ticket.user_id,
+                                full_name: profile?.full_name || 'Usuario',
+                                avatar_url: profile?.avatar_url || ''
+                            },
+                            is_support_ticket: true, // Flag to identify support tickets
+                            ticket_status: ticket.status
+                        };
                     });
 
-                    const formattedRooms = roomsData.map(room => ({
-                        ...room,
-                        unread_count: countMap[room.id] || 0,
-                        other_participant: profileLookup[room.participants.find((p: string) => p !== user.id) || '']
-                    }));
+                    setRooms(formattedRooms as any);
+                }
+            } else {
+                // Fetch regular chat rooms for normal users
+                const { data: roomsData, error } = await supabase
+                    .from('chat_rooms')
+                    .select('*')
+                    .contains('participants', [user.id])
+                    .order('last_message_at', { ascending: false });
 
-                    setRooms(formattedRooms);
-                } else {
-                    setRooms(roomsData);
+                if (error) throw error;
+
+                if (roomsData) {
+                    // Fetch unread counts for these rooms
+                    const { data: unreadMessages } = await supabase
+                        .from('chat_messages')
+                        .select('room_id')
+                        .in('room_id', roomsData.map(r => r.id))
+                        .eq('is_read', false)
+                        .neq('sender_id', user.id);
+
+                    const countMap: Record<string, number> = {};
+                    unreadMessages?.forEach(msg => {
+                        countMap[msg.room_id] = (countMap[msg.room_id] || 0) + 1;
+                    });
+
+                    // Fetch profiles for other participants
+                    const otherParticipantIds = roomsData.map(room =>
+                        room.participants.find((p: string) => p !== user.id)
+                    ).filter(id => !!id);
+
+                    if (otherParticipantIds.length > 0) {
+                        const { data: profiles } = await supabase
+                            .from('profiles')
+                            .select('id, full_name, avatar_url')
+                            .in('id', otherParticipantIds);
+
+                        const profileLookup: Record<string, any> = {};
+                        profiles?.forEach(p => {
+                            profileLookup[p.id] = p;
+                        });
+
+                        const formattedRooms = roomsData.map(room => ({
+                            ...room,
+                            unread_count: countMap[room.id] || 0,
+                            other_participant: profileLookup[room.participants.find((p: string) => p !== user.id) || '']
+                        }));
+
+                        setRooms(formattedRooms);
+                    } else {
+                        setRooms(roomsData);
+                    }
                 }
             }
         } catch (err) {
-            console.error('[Messages] Fetch error:', err);
+            console.error('[Mensajes] Error al cargar:', err);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -129,7 +188,10 @@ export default function MessagesScreen() {
         <TouchableOpacity
             onPress={() => router.push({
                 pathname: '/chat/[id]',
-                params: { id: item.id }
+                params: {
+                    id: item.id,
+                    is_support: item.is_support_ticket ? 'true' : 'false'
+                }
             })}
             style={styles.roomItem}
             activeOpacity={0.7}

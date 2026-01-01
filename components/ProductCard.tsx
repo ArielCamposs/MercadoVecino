@@ -72,7 +72,7 @@ export default function ProductCard({ product, onPress, index, userRole }: Produ
 
       if (data) setIsFavorite(true);
     } catch (err) {
-      console.log('[ProductCard] Check favorite error:', err);
+      console.log('[ProductCard] Error al verificar favorito:', err);
     }
   };
 
@@ -100,7 +100,7 @@ export default function ProductCard({ product, onPress, index, userRole }: Produ
           .eq('product_id', productId);
 
         if (error) {
-          console.error('[Favorites] Delete error:', error);
+          console.error('[Favoritos] Error al eliminar:', error);
           setIsFavorite(true); // Rollback
         }
       } else {
@@ -111,7 +111,7 @@ export default function ProductCard({ product, onPress, index, userRole }: Produ
           .insert({ user_id: userId, product_id: productId });
 
         if (error) {
-          console.error('[Favorites] Insert error:', error);
+          console.error('[Favoritos] Error al insertar:', error);
           setIsFavorite(false); // Rollback
           if (error.code === '42P01') {
             Alert.alert('Error de Configuración', 'La tabla de favoritos no existe en la base de datos.');
@@ -119,7 +119,7 @@ export default function ProductCard({ product, onPress, index, userRole }: Produ
         }
       }
     } catch (err) {
-      console.error('Error toggling favorite:', err);
+      console.error('[Favoritos] Error al cambiar estado:', err);
     } finally {
       setLoadingFav(false);
     }

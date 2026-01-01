@@ -204,14 +204,14 @@ export default function TabOneScreen() {
 
       setProducts(formattedProducts);
       const featured = formattedProducts.filter(p => p.is_featured);
-      console.log('[Home] Total products:', formattedProducts.length);
-      console.log('[Home] Featured count:', featured.length);
+      console.log('[Inicio] Total de productos:', formattedProducts.length);
+      console.log('[Inicio] Productos destacados:', featured.length);
       if (formattedProducts.length > 0) {
-        console.log('[Home] First product featured state:', formattedProducts[0].title, formattedProducts[0].is_featured);
+        console.log('[Inicio] Estado destacado de primer producto:', formattedProducts[0].title, formattedProducts[0].is_featured);
       }
       setFeaturedProducts(featured);
     } catch (error: any) {
-      console.error('[TabOneScreen] Fetch error:', error);
+      console.error('[Inicio] Error al cargar productos:', error);
       if (error.message !== 'Unexpected token') {
         Alert.alert('Error de Conexión', 'No pudimos sincronizar los productos.');
       }
@@ -231,7 +231,7 @@ export default function TabOneScreen() {
       if (error) throw error;
       setBanners(data || []);
     } catch (err) {
-      console.error('[Banners] Error fetching:', err);
+      console.error('[Banners] Error al cargar:', err);
     }
   };
 
@@ -266,7 +266,7 @@ export default function TabOneScreen() {
         }
       }
     } catch (err) {
-      console.error('Error fetching announcements:', err);
+      console.error('[Inicio] Error al cargar anuncios:', err);
     }
   };
 
@@ -279,7 +279,7 @@ export default function TabOneScreen() {
           .update({ is_read: true })
           .eq('id', personalAlert.id);
       } catch (err) {
-        console.error('Error marking alert as read:', err);
+        console.error('[Notificaciones] Error al marcar como leída:', err);
       }
     }
     setShowAlertModal(false);
@@ -313,7 +313,7 @@ export default function TabOneScreen() {
         setNotifications([]);
       }
     } catch (err) {
-      console.error('Error fetching notifications:', err);
+      console.error('[Notificaciones] Error al cargar:', err);
     }
   };
 
@@ -434,7 +434,7 @@ export default function TabOneScreen() {
         setDbCategories(mapped);
       }
     } catch (err) {
-      console.log('Error fetching categories:', err);
+      console.log('[Categorías] Error al cargar:', err);
     }
   };
 
@@ -455,14 +455,14 @@ export default function TabOneScreen() {
       });
 
       if (error) {
-        console.log('Report saved with error (likely table constraint):', error.message);
+        console.log('[Reporte] Error al guardar (posible restricción de tabla):', error.message);
       }
       setShowReportModal(false);
       setReportReason('');
       setReportingProduct(null);
       Alert.alert('¡Gracias!', 'Tu reporte ha sido enviado y será revisado por un administrador.');
     } catch (err) {
-      console.error('Report error:', err);
+      console.error('[Reporte] Error:', err);
     }
   };
 
@@ -471,7 +471,7 @@ export default function TabOneScreen() {
     setSelectedProduct(product);
     // Incrementar contador de vistas de forma silenciosa
     supabase.rpc('increment_product_view', { product_id: product.id }).then(({ error }) => {
-      if (error) console.log('[View Counter] Error incrementing:', error.message);
+      if (error) console.log('[Contador] Error al incrementar vistas:', error.message);
     });
   };
 
@@ -512,7 +512,7 @@ export default function TabOneScreen() {
             })
             .eq('id', existing.id);
 
-          if (updateError) console.error('Error updating contact:', updateError);
+          if (updateError) console.error('[Contacto] Error al actualizar:', updateError);
         } else {
           // If it doesn't exist, we insert
           const { error: insertError } = await supabase
@@ -523,10 +523,10 @@ export default function TabOneScreen() {
               status: 'pending'
             });
 
-          if (insertError) console.error('Error inserting contact:', insertError);
+          if (insertError) console.error('[Contacto] Error al insertar:', insertError);
         }
       } catch (err) {
-        console.error('Unexpected error in handleWhatsApp registration:', err);
+        console.error('[Contacto] Error inesperado en registro de WhatsApp:', err);
       }
     }
 
@@ -544,12 +544,12 @@ export default function TabOneScreen() {
       } else {
         // Fallback directo a protocolo whatsapp://
         Linking.openURL(`whatsapp://send?phone=${cleanNumber}&text=${encodedMessage}`).catch(err => {
-          console.error('[WhatsApp Linking Error]', err);
+          console.error('[WhatsApp] Error de enlace:', err);
           Alert.alert('No se pudo abrir WhatsApp', 'Asegúrate de tener la aplicación instalada en tu dispositivo para contactar al vecino.');
         });
       }
     }).catch(err => {
-      console.error('[Linking Check Error]', err);
+      console.error('[Enlace] Error de validación:', err);
       Alert.alert('Error de Enlace', 'Ocurrió un problema al intentar abrir WhatsApp.');
     });
   };
@@ -604,7 +604,7 @@ export default function TabOneScreen() {
         });
       }
     } catch (err) {
-      console.error('[Chat] Error initializing conversation:', err);
+      console.error('[Chat] Error al inicializar conversación:', err);
       Alert.alert('Error', 'No pudimos iniciar el chat. Inténtalo de nuevo.');
     }
   };

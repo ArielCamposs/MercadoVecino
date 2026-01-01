@@ -132,7 +132,7 @@ export default function FavoritesScreen() {
 
             setProducts(formattedProducts);
         } catch (err) {
-            console.error('Error fetching favorites:', err);
+            console.error('[Favoritos] Error al obtener favoritos:', err);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -196,7 +196,7 @@ export default function FavoritesScreen() {
                 });
             }
         } catch (err) {
-            console.error('[Chat] Error initializing conversation:', err);
+            console.error('[Chat] Error al inicializar conversación:', err);
             Alert.alert('Error', 'No pudimos iniciar el chat. Inténtalo de nuevo.');
         }
     };
