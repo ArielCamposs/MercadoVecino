@@ -11,11 +11,13 @@ import {
     Platform,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Helper para convertir base64 a ArrayBuffer (necesario para estabilidad en React Native + Supabase)
@@ -98,6 +100,10 @@ export default function PostScreen() {
     const [loading, setLoading] = useState(false);
     const [checkingRole, setCheckingRole] = useState(true);
 
+    const [allowsPickup, setAllowsPickup] = useState(true);
+    const [allowsDelivery, setAllowsDelivery] = useState(false);
+    const [deliveryFee, setDeliveryFee] = useState('0');
+
     useEffect(() => {
         async function initializeData() {
             try {
@@ -157,6 +163,9 @@ export default function PostScreen() {
                             setLocation(productData.location || '');
                             setWhatsapp(productData.whatsapp_number || '');
                             setExtraServices(productData.extra_services || []);
+                            setAllowsPickup(productData.allows_pickup ?? true);
+                            setAllowsDelivery(productData.allows_delivery ?? false);
+                            setDeliveryFee((productData.delivery_fee || 0).toString());
                         }
                     } else {
                         // Crucial: Reset form when NOT editing to avoid state persistence from previous edit
@@ -286,7 +295,7 @@ export default function PostScreen() {
                 finalImageUrls = [selectedCategory?.image || 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?q=80&w=500&auto=format&fit=crop'];
             }
 
-            const productData = {
+            const productData: any = {
                 title: title.trim(),
                 price: parseInt(price, 10) || 0,
                 category: selectedCategory?.name || 'Otros',
@@ -294,10 +303,41 @@ export default function PostScreen() {
                 location: location.trim(),
                 whatsapp_number: whatsapp.trim(),
                 extra_services: extraServices.filter((s: any) => s.name && s.price),
+                allows_pickup: allowsPickup,
+                allows_delivery: allowsDelivery,
+                delivery_fee: parseInt(deliveryFee, 10) || 0,
                 user_id: user.id,
                 image_url: finalImageUrls[0], // Keep for backward compatibility
                 image_urls: finalImageUrls, // New multi-image field
             };
+
+            // Fetch moderation config to decide initial status
+            try {
+                const { data: configs } = await supabase
+                    .from('app_config')
+                    .select('key, value')
+                    .in('key', ['require_product_approval', 'forbidden_words']);
+
+                const requireApproval = configs?.find(c => c.key === 'require_product_approval')?.value === true;
+                let forbiddenWords = configs?.find(c => c.key === 'forbidden_words')?.value || [];
+
+                // Handle both string (comma-separated) and array formats
+                if (typeof forbiddenWords === 'string') {
+                    forbiddenWords = forbiddenWords.split(',').map(w => w.trim()).filter(w => w.length > 0);
+                }
+
+                // Scan content (title + description)
+                const contentToScan = `${productData.title} ${productData.description}`.toLowerCase();
+                const hasForbidden = Array.isArray(forbiddenWords) && forbiddenWords.some(word =>
+                    word.length > 1 && contentToScan.includes(word.toLowerCase().trim())
+                );
+
+                if (requireApproval || hasForbidden) {
+                    productData.status = 'pending';
+                }
+            } catch (e) {
+                // Silently ignore config fetch errors
+            }
 
             if (isEditing && id) {
                 const { error: updateError } = await supabase
@@ -306,8 +346,21 @@ export default function PostScreen() {
                     .eq('id', id);
 
                 if (updateError) {
-                    console.error('[Anuncio] Error de actualización:', updateError);
-                    throw updateError;
+                    // Fallback if status or coordinate columns are missing
+                    if (updateError.code === '42703') {
+                        let retrying = false;
+                        if (productData.status) { delete productData.status; retrying = true; }
+
+                        if (retrying) {
+                            const { error: retryError } = await supabase.from('products').update(productData).eq('id', id);
+                            if (retryError) throw retryError;
+                        } else {
+                            throw updateError;
+                        }
+                    } else {
+                        console.error('[Anuncio] Error de actualización:', updateError);
+                        throw updateError;
+                    }
                 }
                 console.log('--- UPDATE SUCCESSFUL ---');
 
@@ -321,7 +374,22 @@ export default function PostScreen() {
                     .from('products')
                     .insert([productData]);
 
-                if (insertError) throw insertError;
+                if (insertError) {
+                    // Fallback if status or coordinate columns are missing
+                    if (insertError.code === '42703') {
+                        let retrying = false;
+                        if (productData.status) { delete productData.status; retrying = true; }
+
+                        if (retrying) {
+                            const { error: retryError } = await supabase.from('products').insert([productData]);
+                            if (retryError) throw retryError;
+                        } else {
+                            throw insertError;
+                        }
+                    } else {
+                        throw insertError;
+                    }
+                }
 
                 Alert.alert(
                     '¡Publicación Exitosa!',
@@ -353,6 +421,9 @@ export default function PostScreen() {
         setLocation('');
         setWhatsapp('');
         setExtraServices([]);
+        setAllowsPickup(true);
+        setAllowsDelivery(false);
+        setDeliveryFee('0');
     };
 
     const insets = useSafeAreaInsets();
@@ -533,6 +604,53 @@ export default function PostScreen() {
                                 className="bg-white p-5 rounded-3xl border border-brand-50 shadow-sm text-slate-900 text-base"
                                 placeholderTextColor="#94A3B8"
                             />
+                        </View>
+
+                        {/* Delivery Options */}
+                        <View className="bg-white p-6 rounded-[32px] border border-brand-50 shadow-sm mt-6">
+                            <Text className="text-brand-700 font-black mb-4 text-base">Opciones de Entrega</Text>
+
+                            <View className="flex-row items-center justify-between mb-4">
+                                <View className="flex-1 mr-4">
+                                    <Text className="text-slate-900 font-bold text-sm">Retiro Presencial</Text>
+                                    <Text className="text-slate-400 text-[10px]">El vecino puede ir a buscar el producto</Text>
+                                </View>
+                                <Switch
+                                    value={allowsPickup}
+                                    onValueChange={setAllowsPickup}
+                                    trackColor={{ false: '#E2E8F0', true: '#8b5cf6' }}
+                                    thumbColor="white"
+                                />
+                            </View>
+
+                            <View className="h-px bg-slate-50 mb-4" />
+
+                            <View className="flex-row items-center justify-between mb-4">
+                                <View className="flex-1 mr-4">
+                                    <Text className="text-slate-900 font-bold text-sm">Delivery a Domicilio</Text>
+                                    <Text className="text-slate-400 text-[10px]">Tú llevas el producto al vecino</Text>
+                                </View>
+                                <Switch
+                                    value={allowsDelivery}
+                                    onValueChange={setAllowsDelivery}
+                                    trackColor={{ false: '#E2E8F0', true: '#8b5cf6' }}
+                                    thumbColor="white"
+                                />
+                            </View>
+
+                            {allowsDelivery && (
+                                <Animated.View entering={FadeInDown.springify()} className="mt-2 bg-brand-50/50 p-4 rounded-2xl border border-brand-100">
+                                    <Text className="text-brand-700 font-bold mb-2 text-xs">Costo de Envío ($)</Text>
+                                    <TextInput
+                                        value={deliveryFee}
+                                        onChangeText={(val) => setDeliveryFee(val.replace(/[^0-9]/g, ''))}
+                                        placeholder="0 si es gratis o a convenir"
+                                        keyboardType="numeric"
+                                        className="bg-white p-3 rounded-xl border border-brand-100 text-slate-900 text-sm font-bold"
+                                        placeholderTextColor="#94A3B8"
+                                    />
+                                </Animated.View>
+                            )}
                         </View>
 
                         <View className="bg-transparent mt-5">

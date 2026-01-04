@@ -1,3 +1,4 @@
+import ProductDetailModal from '@/components/ProductDetailModal';
 import PromptReviewModal from '@/components/PromptReviewModal';
 import { sendPushNotification } from '@/lib/notification_sender';
 import { supabase } from '@/lib/supabase';
@@ -41,9 +42,18 @@ interface ProductInfo {
     id: string;
     title: string;
     price: number;
-    image_url: string;
+    image: string;
+    image_urls?: string[];
     category: string;
     user_id: string;
+    seller?: string;
+    is_verified?: boolean;
+    description?: string;
+    location?: string;
+    allows_pickup?: boolean;
+    allows_delivery?: boolean;
+    delivery_fee?: number;
+    extra_services?: { name: string, price: string }[];
 }
 
 export default function ChatScreen() {
@@ -56,6 +66,7 @@ export default function ChatScreen() {
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [otherParticipant, setOtherParticipant] = useState<Participant | null>(null);
     const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
+    const [showProductModal, setShowProductModal] = useState(false);
     const [sending, setSending] = useState(false);
     const [contactStatus, setContactStatus] = useState<string | null>(null);
     const [isOtherOnline, setIsOtherOnline] = useState(false);
@@ -217,7 +228,6 @@ export default function ChatScreen() {
                 if (ticketError) throw ticketError;
                 setTicketData(ticket);
 
-                // Set user profile as other participant
                 const profile = Array.isArray(ticket.profiles) ? ticket.profiles[0] : ticket.profiles;
                 setOtherParticipant({
                     id: profile?.id || ticket.user_id,
@@ -225,13 +235,11 @@ export default function ChatScreen() {
                     avatar_url: profile?.avatar_url || ''
                 });
 
-                // Set admin reply if exists
                 if (ticket.admin_reply) {
                     setAdminReply(ticket.admin_reply);
                 }
             } else {
                 // Handle Regular Chat
-                // 1. Fetch Room & Participants
                 const { data: room, error: roomError } = await supabase
                     .from('chat_rooms')
                     .select('*')
@@ -241,7 +249,6 @@ export default function ChatScreen() {
                 if (roomError) throw roomError;
                 setRoom(room);
 
-                // 2. Fetch Other Participant Profile
                 const otherId = room.participants.find((p: string) => p !== user.id);
                 if (otherId) {
                     const { data: profile } = await supabase
@@ -252,24 +259,47 @@ export default function ChatScreen() {
                     setOtherParticipant(profile);
                 }
 
-                // 3. Fetch Product Info
                 if (room.product_id) {
-                    const { data: prod } = await supabase
+                    // 1. Fetch Product
+                    const { data: prod, error: prodError } = await supabase
                         .from('products')
-                        .select('id, title, price, image_url, category, user_id') // Added user_id
+                        .select('*')
                         .eq('id', room.product_id)
-                        .single();
+                        .maybeSingle();
+
+                    if (prodError) {
+                        console.error('[Chat] Error al cargar info del producto:', prodError);
+                    }
+
                     if (prod) {
-                        setProductInfo({
+                        // 2. Fetch Seller Profile separately to avoid join errors
+                        const { data: sellerInfo } = await supabase
+                            .from('profiles')
+                            .select('full_name, is_verified')
+                            .eq('id', prod.user_id)
+                            .maybeSingle();
+
+                        const productData: ProductInfo = {
                             id: prod.id,
                             title: prod.title,
                             price: prod.price,
-                            image_url: prod.image_url,
+                            image: prod.image_url,
+                            image_urls: prod.image_urls || [],
                             category: prod.category,
-                            user_id: prod.user_id // Set product owner
-                        });
+                            user_id: prod.user_id,
+                            seller: sellerInfo?.full_name || 'Vecino',
+                            is_verified: !!sellerInfo?.is_verified,
+                            description: prod.description,
+                            location: prod.location,
+                            allows_pickup: prod.allows_pickup,
+                            allows_delivery: prod.allows_delivery,
+                            delivery_fee: prod.delivery_fee,
+                            extra_services: prod.extra_services
+                        };
+                        console.log('[Chat] Info del producto cargada:', productData.title);
+                        setProductInfo(productData);
 
-                        // 4. Fetch Contact Status (for Deal Closing)
+                        // 4. Fetch Contact Status
                         const buyerId = room.participants.find((p: string) => p !== prod.user_id);
                         if (buyerId) {
                             const { data: contact } = await supabase
@@ -292,13 +322,11 @@ export default function ChatScreen() {
 
                 if (msgsError) throw msgsError;
                 setMessages(msgs || []);
-
-                // 6. Mark all as read
                 markAsRead();
             }
-
         } catch (err) {
-            console.error('[Chat] Error de configuración:', err);
+            console.error('[Chat] Error:', err);
+            Alert.alert('Error', 'No pudimos cargar la conversación.');
         } finally {
             setLoading(false);
         }
@@ -859,8 +887,11 @@ export default function ChatScreen() {
                     {productInfo && (
                         <View style={styles.productContextCard}>
                             <View style={styles.productImageContainer}>
-                                {productInfo.image_url ? (
-                                    <Image source={{ uri: productInfo.image_url }} style={styles.productImage} />
+                                {productInfo.image || (productInfo.image_urls && productInfo.image_urls.length > 0) ? (
+                                    <Image
+                                        source={{ uri: productInfo.image || (productInfo.image_urls && productInfo.image_urls[0]) }}
+                                        style={styles.productImage}
+                                    />
                                 ) : (
                                     <View style={[styles.productImage, { backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }]}>
                                         <Info size={16} color="#CBD5E1" />
@@ -880,7 +911,8 @@ export default function ChatScreen() {
                             </View>
                             <TouchableOpacity
                                 onPress={() => {
-                                    // Possibly navigate back to product or show more info
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    setShowProductModal(true);
                                 }}
                                 className="bg-slate-50 px-3 py-2 rounded-xl border border-slate-100"
                             >
@@ -1029,16 +1061,23 @@ export default function ChatScreen() {
                     </KeyboardAvoidingView>
 
                     {productInfo && (
-                        <PromptReviewModal
-                            visible={showReviewModal}
-                            productId={productInfo.id}
-                            productTitle={productInfo.title}
-                            onClose={() => setShowReviewModal(false)}
-                            onSuccess={() => {
-                                setShowReviewModal(false);
-                                // Optionally trigger a refresh or a message
-                            }}
-                        />
+                        <>
+                            <ProductDetailModal
+                                visible={showProductModal}
+                                product={productInfo as any}
+                                onClose={() => setShowProductModal(false)}
+                                userRole={null}
+                            />
+                            <PromptReviewModal
+                                visible={showReviewModal}
+                                productId={productInfo.id}
+                                productTitle={productInfo.title}
+                                onClose={() => setShowReviewModal(false)}
+                                onSuccess={() => {
+                                    setShowReviewModal(false);
+                                }}
+                            />
+                        </>
                     )}
                 </>
             )}

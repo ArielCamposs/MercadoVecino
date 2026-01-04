@@ -1,14 +1,14 @@
 import ProductCard, { Product } from '@/components/ProductCard';
+import ProductDetailModal from '@/components/ProductDetailModal';
 import ProductGalleryModal from '@/components/ProductGalleryModal';
-import ReviewSection from '@/components/ReviewSection';
 import SkeletonProductCard from '@/components/SkeletonProductCard';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { BadgeCheck, Heart, MessageCircle, Star, Store, User, UserPlus, X } from 'lucide-react-native';
+import { BadgeCheck, Star, Store, User, UserPlus, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
-import { Alert, Dimensions, Image, Linking, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
@@ -247,34 +247,40 @@ export default function MerchantProfileScreen() {
                 .from('chat_rooms')
                 .select('id')
                 .contains('participants', [user.id, product.user_id])
-                .single();
+                .eq('product_id', product.id)
+                .maybeSingle();
 
-            if (existingRoom) {
-                setSelectedProduct(null);
-                router.push({
-                    pathname: '/chat/[id]',
-                    params: { id: existingRoom.id }
-                });
-                return;
+            let roomId = existingRoom?.id;
+
+            if (!roomId) {
+                // 2. Create room
+                const { data: newRoom, error: createError } = await supabase
+                    .from('chat_rooms')
+                    .insert({
+                        product_id: product.id,
+                        participants: [user.id, product.user_id]
+                    })
+                    .select()
+                    .single();
+
+                if (createError) throw createError;
+                roomId = newRoom?.id;
             }
 
-            // 2. Create room
-            const { data: newRoom, error: createError } = await supabase
-                .from('chat_rooms')
-                .insert({
-                    product_id: product.id,
-                    participants: [user.id, product.user_id]
-                })
-                .select()
-                .single();
+            if (roomId) {
+                // 3. Send context message (every time)
+                await supabase
+                    .from('chat_messages')
+                    .insert({
+                        room_id: roomId,
+                        sender_id: user.id,
+                        content: `¡Hola! Me interesa tu producto: ${product.title}. ¿Está disponible?`
+                    });
 
-            if (createError) throw createError;
-
-            if (newRoom) {
                 setSelectedProduct(null);
                 router.push({
                     pathname: '/chat/[id]',
-                    params: { id: newRoom.id }
+                    params: { id: roomId }
                 });
             }
         } catch (err) {
@@ -452,162 +458,14 @@ export default function MerchantProfileScreen() {
                 </View>
             </ScrollView>
 
-            {/* Same Product Detail Modal as index.tsx (simplified or could be a common component) */}
-            <Modal
+            <ProductDetailModal
                 visible={!!selectedProduct}
-                animationType="slide"
-                transparent={true}
-            >
-                <View style={styles.modalOverlay}>
-                    <View className="bg-white h-[90%] rounded-t-[50px] overflow-hidden">
-                        {selectedProduct && (
-                            <ScrollView showsVerticalScrollIndicator={false}>
-                                <View className="relative">
-                                    {/* Carousel de Imágenes */}
-                                    {selectedProduct.image_urls && selectedProduct.image_urls.length > 1 ? (
-                                        <View>
-                                            <ScrollView
-                                                horizontal
-                                                pagingEnabled
-                                                showsHorizontalScrollIndicator={false}
-                                                style={{ width: width, height: width }}
-                                            >
-                                                {selectedProduct.image_urls.map((url, index) => (
-                                                    <TouchableOpacity
-                                                        key={index}
-                                                        activeOpacity={0.9}
-                                                        onPress={() => openGallery(selectedProduct.image_urls as string[], index)}
-                                                    >
-                                                        <Image
-                                                            source={{ uri: url }}
-                                                            style={{ width: width, height: width }}
-                                                            className="rounded-[40px]"
-                                                            resizeMode="cover"
-                                                        />
-                                                    </TouchableOpacity>
-                                                ))}
-                                            </ScrollView>
-
-                                            <View className="absolute bottom-6 w-full flex-row justify-center space-x-2">
-                                                {selectedProduct.image_urls.map((_, index) => (
-                                                    <View
-                                                        key={index}
-                                                        style={{
-                                                            width: 8,
-                                                            height: 8,
-                                                            borderRadius: 4,
-                                                            backgroundColor: 'white',
-                                                            opacity: 0.8,
-                                                            shadowColor: '#000',
-                                                            shadowOffset: { width: 0, height: 2 },
-                                                            shadowOpacity: 0.2,
-                                                            shadowRadius: 4,
-                                                        }}
-                                                    />
-                                                ))}
-                                            </View>
-                                        </View>
-                                    ) : (
-                                        <TouchableOpacity
-                                            activeOpacity={0.9}
-                                            onPress={() => openGallery([selectedProduct.image])}
-                                        >
-                                            <Image
-                                                source={{ uri: selectedProduct.image }}
-                                                className="w-full aspect-square rounded-[40px]"
-                                                resizeMode="cover"
-                                            />
-                                        </TouchableOpacity>
-                                    )}
-                                    <TouchableOpacity
-                                        onPress={() => setSelectedProduct(null)}
-                                        style={styles.modalCloseBtn}
-                                    >
-                                        <X size={24} color="black" />
-                                    </TouchableOpacity>
-
-                                    <View style={styles.ratingBadge}>
-                                        <Star size={14} fill="#FACC15" color="#FACC15" />
-                                        <Text className="text-slate-800 font-black ml-2 text-sm">{(selectedProduct.rating || 0).toFixed(1)}</Text>
-                                        <Text className="text-slate-400 font-bold ml-1 text-xs">({selectedProduct.review_count || 0})</Text>
-                                    </View>
-
-                                    {(userRole === 'client' || !userRole) && (
-                                        <TouchableOpacity
-                                            style={[styles.modalCloseBtn, { right: 84 }]}
-                                            onPress={() => {
-                                                Alert.alert('Favorito', 'Producto guardado en tu colección.');
-                                            }}
-                                        >
-                                            <Heart size={24} color="#FF0000" fill="#FF0000" />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                                <View className="p-8">
-                                    <Text className="text-brand-600 font-black text-xs uppercase tracking-widest mb-1">{selectedProduct.category}</Text>
-                                    <Text className="text-slate-900 font-black text-3xl mb-4">{selectedProduct.title}</Text>
-                                    <Text className="text-2xl font-black text-brand-600 mb-6">${selectedProduct.price.toLocaleString()}</Text>
-
-                                    <View className="mb-8">
-                                        <Text className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-2">Descripción</Text>
-                                        <Text className="text-slate-600 text-lg leading-6">{selectedProduct.description || 'Sin descripción.'}</Text>
-                                    </View>
-
-                                    <ReviewSection productId={selectedProduct.id} />
-
-                                    <View className="space-y-3 mb-8">
-                                        <TouchableOpacity
-                                            onPress={() => handleInternalChat(selectedProduct)}
-                                            activeOpacity={0.8}
-                                            disabled={userRole === 'vendor'}
-                                            style={[
-                                                styles.whatsappBtn,
-                                                { backgroundColor: '#4F46E5', shadowColor: '#4F46E5', marginBottom: 0 },
-                                                userRole === 'vendor' && styles.whatsappBtnDisabled
-                                            ]}
-                                        >
-                                            <MessageCircle size={22} color={userRole === 'vendor' ? '#94A3B8' : 'white'} style={{ marginRight: 10 }} />
-                                            <Text style={[
-                                                styles.whatsappBtnText,
-                                                userRole === 'vendor' && styles.whatsappBtnTextDisabled
-                                            ]}>
-                                                {userRole === 'vendor' ? 'Solo para Vecinos' : 'Chat Vecinal (Privado)'}
-                                            </Text>
-                                        </TouchableOpacity>
-
-                                        <TouchableOpacity
-                                            onPress={() => handleWhatsApp(selectedProduct)}
-                                            activeOpacity={0.8}
-                                            disabled={userRole === 'vendor'}
-                                            style={[
-                                                styles.whatsappBtn,
-                                                {
-                                                    backgroundColor: 'transparent',
-                                                    borderColor: userRole === 'vendor' ? '#E2E8F0' : '#25D366',
-                                                    borderWidth: 2,
-                                                    shadowOpacity: 0,
-                                                    elevation: 0,
-                                                    marginTop: 12
-                                                },
-                                                userRole === 'vendor' && styles.whatsappBtnDisabled
-                                            ]}
-                                        >
-                                            <MessageCircle size={22} color={userRole === 'vendor' ? '#94A3B8' : '#25D366'} style={{ marginRight: 10 }} />
-                                            <Text style={[
-                                                styles.whatsappBtnText,
-                                                { color: userRole === 'vendor' ? '#94A3B8' : '#25D366' },
-                                                userRole === 'vendor' && styles.whatsappBtnTextDisabled
-                                            ]}>
-                                                {userRole === 'vendor' ? 'Solo para Vecinos' : 'WhatsApp Directo'}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            </ScrollView>
-                        )}
-                    </View>
-                </View>
-            </Modal>
+                product={selectedProduct}
+                onClose={() => setSelectedProduct(null)}
+                userRole={userRole}
+                onInternalChat={handleInternalChat}
+                isFavorite={false} // Favoritos se manejan diferente aquí
+            />
             {/* Product Gallery Modal */}
             <ProductGalleryModal
                 visible={showGallery}

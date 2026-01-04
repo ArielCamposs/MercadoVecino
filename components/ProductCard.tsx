@@ -1,4 +1,4 @@
-import { BadgeCheck, Heart, MapPin, ShoppingBag, Sparkles, Star, User } from 'lucide-react-native';
+import { BadgeCheck, Gift, Heart, MapPin, ShoppingBag, Sparkles, Star, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
@@ -26,6 +26,9 @@ export interface Product {
   is_verified?: boolean;
   is_featured?: boolean;
   image_urls?: string[];
+  allows_pickup?: boolean;
+  allows_delivery?: boolean;
+  delivery_fee?: number;
 }
 
 interface ProductCardProps {
@@ -33,9 +36,11 @@ interface ProductCardProps {
   onPress: (product: Product) => void;
   index: number;
   userRole?: string | null;
+  themeColor?: string;
+  eventBadge?: string | null;
 }
 
-export default function ProductCard({ product, onPress, index, userRole }: ProductCardProps) {
+export default function ProductCard({ product, onPress, index, userRole, themeColor = '#8b5cf6', eventBadge }: ProductCardProps) {
   const [isFavorite, setIsFavorite] = useState(false);
   const [loadingFav, setLoadingFav] = useState(false);
 
@@ -162,6 +167,16 @@ export default function ProductCard({ product, onPress, index, userRole }: Produ
                   color={isFavorite ? '#FF0000' : 'white'}
                 />
               </TouchableOpacity>
+            )}
+
+            {eventBadge && (
+              <View
+                style={{ backgroundColor: themeColor, position: 'absolute', top: 12, left: 12 }}
+                className="px-3 py-1.5 rounded-xl flex-row items-center border border-white/20 shadow-sm"
+              >
+                <Gift size={10} color="white" />
+                <Text className="text-white text-[9px] font-black uppercase ml-1.5 tracking-wider">{eventBadge}</Text>
+              </View>
             )}
           </View>
 

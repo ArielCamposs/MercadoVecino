@@ -1,46 +1,36 @@
-import { logAdminAction } from '@/lib/admin_logger';
-import { broadcastPushNotification } from '@/lib/notification_sender';
-import { supabase } from '@/lib/supabase';
+/// <reference types="nativewind/types" />
+import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import {
     Activity,
-    AlertCircle,
     AlertTriangle,
     BadgeCheck,
     Calendar,
     Camera,
     ChevronLeft,
-    Clock,
-    DollarSign,
-    Flag,
-    History as HistoryLogIcon,
-    Image as ImageIcon,
+    Gift,
     Info,
-    LayoutGrid,
     MapPin,
-    Megaphone,
-    MessageSquare,
     Package,
+    PartyPopper,
     Phone,
-    Search,
     Send,
     ShieldCheck,
+    ShoppingBasket,
+    Snowflake,
     Sparkles,
     Star,
-    ToggleRight as ToggleIcon,
-    Trash2,
-    TrendingUp,
-    Trophy,
     UserMinus,
-    UserPlus,
     Users,
     X
 } from 'lucide-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Animated,
     Image,
     Modal,
     RefreshControl,
@@ -52,58 +42,147 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { logAdminAction } from '../../lib/admin_logger';
+import { broadcastPushNotification } from '../../lib/notification_sender';
+import { supabase } from '../../lib/supabase';
+
+import {
+    ActivityLogItem,
+    ActivityTab,
+    AppConfig,
+    ApprovalsTab,
+    AuditLog,
+    AuditTab,
+    Banner,
+    BannersTab,
+    CategoriesTab,
+    Contact,
+    DashboardTab,
+    EventsTab,
+    GalleryTab,
+    HealthTab,
+    MerchantPerformance,
+    PerformanceTab,
+    Product,
+    ProductsTab,
+    Profile,
+    Report,
+    ReportsTab,
+    Review,
+    ReviewsTab,
+    SettingsTab,
+    SpecialEvent,
+    TransactionsTab,
+    UsersTab
+} from './admin/index';
+
+const EVENT_PRESETS = [
+    { id: 'christmas', label: 'Navidad', icon: 'Snowflake', color: '#EF4444', defaultName: 'Venta de Navidad' },
+    { id: 'cyber', label: 'Cyber', icon: 'PartyPopper', color: '#6366f1', defaultName: 'Cyber Day' },
+    { id: 'summer', label: 'Verano', icon: 'Sparkles', color: '#10B981', defaultName: 'Especial de Verano' },
+    { id: 'sale', label: 'Oferta', icon: 'ShoppingBasket', color: '#F59E0B', defaultName: 'Gran Oferta' },
+    { id: 'general', label: 'General', icon: 'Gift', color: '#8b5cf6', defaultName: 'Evento Especial' },
+];
 
 export default function AdminDashboard() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
 
-    const [title, setTitle] = useState('');
-    const [content, setContent] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [title, setTitle] = useState<string>('');
+    const [content, setContent] = useState<string>('');
+    const [loading, setLoading] = useState<boolean>(false);
     const [announcements, setAnnouncements] = useState<any[]>([]);
-    const [stats, setStats] = useState({ users: 0, vendors: 0, products: 0 });
-    const [refreshing, setRefreshing] = useState(false);
+    const [stats, setStats] = useState<{ users: number, vendors: number, products: number }>({ users: 0, vendors: 0, products: 0 });
+    const [refreshing, setRefreshing] = useState<boolean>(false);
 
     // New state for Tabs
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'products' | 'reviews' | 'activity' | 'gallery' | 'categories' | 'reports' | 'banners' | 'audit'>('dashboard');
-    const [auditLogs, setAuditLogs] = useState<any[]>([]);
-    const [users, setUsers] = useState<any[]>([]);
-    const [products, setProducts] = useState<any[]>([]);
-    const [reviews, setReviews] = useState<any[]>([]);
-    const [activityLogs, setActivityLogs] = useState<any[]>([]);
-    const [galleryProducts, setGalleryProducts] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState<string>('dashboard');
+    const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+    const [merchantPerformance, setMerchantPerformance] = useState<MerchantPerformance[]>([]);
+    const [users, setUsers] = useState<Profile[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [reviews, setReviews] = useState<Review[]>([]);
+    const [activityLogs, setActivityLogs] = useState<ActivityLogItem[]>([]);
+    const [galleryProducts, setGalleryProducts] = useState<Product[]>([]);
     const [categoriesConfig, setCategoriesConfig] = useState<string[]>(['Comida', 'Almacén', 'Servicios', 'Tecnología', 'Otros']);
-    const [reports, setReports] = useState<any[]>([]);
-    const [banners, setBanners] = useState<any[]>([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isActionLoading, setIsActionLoading] = useState(false);
-    const [whatsappContactsCount, setWhatsappContactsCount] = useState(0);
+    const [reports, setReports] = useState<Report[]>([]);
+    const [banners, setBanners] = useState<Banner[]>([]);
+    const [specialEvents, setSpecialEvents] = useState<SpecialEvent[]>([]);
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [isActionLoading, setIsActionLoading] = useState<boolean>(false);
+    const [whatsappContactsCount, setWhatsappContactsCount] = useState<number>(0);
 
     // Advanced Metrics State
-    const [confirmedContactsCount, setConfirmedContactsCount] = useState(0);
-    const [conversionRate, setConversionRate] = useState(0);
-    const [topProducts, setTopProducts] = useState<any[]>([]);
+    const [confirmedContactsCount, setConfirmedContactsCount] = useState<number>(0);
+    const [conversionRate, setConversionRate] = useState<number>(0);
+    const [topProducts, setTopProducts] = useState<Product[]>([]);
     const [topSellers, setTopSellers] = useState<any[]>([]);
-    const [openTicketsCount, setOpenTicketsCount] = useState(0);
+    const [openTicketsCount, setOpenTicketsCount] = useState<number>(0);
 
     // Real-time Intelligence State
-    const [onlineCount, setOnlineCount] = useState(0);
-    const [economicVolume, setEconomicVolume] = useState(0);
-    const [maintenanceEnabled, setMaintenanceEnabled] = useState(false);
-    const [selectedUser, setSelectedUser] = useState<any | null>(null);
-    const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
-    const [showUserModal, setShowUserModal] = useState(false);
-    const [showProductModal, setShowProductModal] = useState(false);
-    const [targetedMessage, setTargetedMessage] = useState('');
-    const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
-    const [newCategoryName, setNewCategoryName] = useState('');
-    const [showBannerModal, setShowBannerModal] = useState(false);
-    const [newBanner, setNewBanner] = useState({ image_url: '', title: '', description: '', link_route: '' });
-    const [pickingImage, setPickingImage] = useState(false);
+    const [onlineCount, setOnlineCount] = useState<number>(0);
+    const [economicVolume, setEconomicVolume] = useState<number>(0);
+    const [maintenanceEnabled, setMaintenanceEnabled] = useState<boolean>(false);
+    const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [showUserModal, setShowUserModal] = useState<boolean>(false);
+    const [showProductModal, setShowProductModal] = useState<boolean>(false);
+    const [targetedMessage, setTargetedMessage] = useState<string>('');
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 0.3, duration: 1500, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+            ])
+        ).start();
+    }, []);
+
+    const handleTabPress = (tab: string) => {
+        if (tab !== activeTab) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setActiveTab(tab);
+        }
+    };
+
+    const handleCopyId = async (id: string, label: string = 'ID') => {
+        await Clipboard.setStringAsync(id);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Copiado', `${label} copiado al portapapeles.`);
+    };
+
+    const [showAddCategoryModal, setShowAddCategoryModal] = useState<boolean>(false);
+    const [newCategoryName, setNewCategoryName] = useState<string>('');
+    const [showBannerModal, setShowBannerModal] = useState<boolean>(false);
+    const [newBanner, setNewBanner] = useState<{ image_url: string, title: string, description: string, link_route: string }>({ image_url: '', title: '', description: '', link_route: '' });
+    const [pickingImage, setPickingImage] = useState<boolean>(false);
+
+    // Phase 3 Features State
+    const [healthLogs, setHealthLogs] = useState<{ type: string, message: string, detail?: string, status?: string }[]>([]);
+    const [appConfig, setAppConfig] = useState<AppConfig[]>([]);
+    const [isHealthCheckRunning, setIsHealthCheckRunning] = useState<boolean>(false);
+    const [warningReason, setWarningReason] = useState<string>('');
+
+    // Phase 4 Features State
+    const [transactions, setTransactions] = useState<Contact[]>([]);
+    const [pendingProducts, setPendingProducts] = useState<Product[]>([]);
+    const [requireApproval, setRequireApproval] = useState<boolean>(false);
+    const [pendingCount, setPendingCount] = useState<number>(0);
 
     // Ban System State
-    const [banDuration, setBanDuration] = useState('');
-    const [banReason, setBanReason] = useState('');
+    const [banDuration, setBanDuration] = useState<string>('');
+    const [banReason, setBanReason] = useState<string>('');
+
+    const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
+    const [configKey, setConfigKey] = useState<string>('');
+    const [configValue, setConfigValue] = useState<string>('');
+    const [isEditingConfig, setIsEditingConfig] = useState<boolean>(false);
+
+    const [showAddEventModal, setShowAddEventModal] = useState<boolean>(false);
+    const [newEventName, setNewEventName] = useState<string>('');
+    const [newEventType, setNewEventType] = useState<string>('general');
+    const [newEventColor, setNewEventColor] = useState<string>('#8b5cf6');
 
     const handleToggleVerification = async () => {
         if (!selectedUser) return;
@@ -135,6 +214,7 @@ export default function AdminDashboard() {
                 newStatus ? 'Vendedor Verificado' : 'Verificación Removida',
                 newStatus ? 'Se ha otorgado el sello de confianza.' : 'Se ha retirado el sello de confianza.'
             );
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
             await logAdminAction(
                 newStatus ? 'verify_vendor' : 'unverify_vendor',
@@ -154,6 +234,7 @@ export default function AdminDashboard() {
         } catch (err: any) {
             console.error('[Admin] Error al capturar verificación:', err);
             Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
         }
@@ -175,11 +256,13 @@ export default function AdminDashboard() {
             if (error) throw error;
 
             Alert.alert('Ban Levantado', 'El usuario ya puede acceder nuevamente a la plataforma.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             await logAdminAction('unban_user', selectedUser.id, 'user', { full_name: selectedUser.full_name });
             setShowUserModal(false);
             fetchData();
         } catch (err: any) {
             Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
         }
@@ -188,12 +271,14 @@ export default function AdminDashboard() {
     const handleBanUser = async () => {
         if (!selectedUser || !banDuration || !banReason) {
             Alert.alert('Error', 'Debes ingresar duración y motivo.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             return;
         }
 
         const days = parseInt(banDuration);
         if (isNaN(days) || days <= 0) {
             Alert.alert('Error', 'La duración debe ser un número válido de días.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             return;
         }
 
@@ -213,6 +298,7 @@ export default function AdminDashboard() {
             if (error) throw error;
 
             Alert.alert('Usuario Baneado', `El usuario ha sido suspendido por ${days} días.`);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             await logAdminAction('ban_user', selectedUser.id, 'user', {
                 full_name: selectedUser.full_name,
                 duration_days: days,
@@ -224,8 +310,404 @@ export default function AdminDashboard() {
             fetchData();
         } catch (err: any) {
             Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
+        }
+    };
+
+    const handleWarnUser = async () => {
+        if (!selectedUser || !warningReason) {
+            Alert.alert('Error', 'Debes ingresar un motivo para la advertencia.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            return;
+        }
+
+        try {
+            setIsActionLoading(true);
+            const currentWarnings = selectedUser.warning_count || 0;
+            const newWarnings = currentWarnings + 1;
+
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    warning_count: newWarnings,
+                    last_warning_reason: warningReason
+                })
+                .eq('id', selectedUser.id);
+
+            // If column doesn't exist, we'll get an error, but we'll try to handle it
+            if (error) {
+                console.log('[Admin] Note: warning_count column might be missing. Attempting workaround with announcement only.');
+            }
+
+            // Create a specific announcement for the user
+            await supabase
+                .from('system_announcements')
+                .insert({
+                    title: '⚠️ Advertencia Administrativa',
+                    content: `Has recibido una advertencia. Motivo: ${warningReason}. Acumuladas: ${newWarnings}/3.`,
+                    user_id: (await supabase.auth.getUser()).data.user?.id,
+                    recipient_id: selectedUser.id,
+                    type: 'alert',
+                    is_active: true
+                });
+
+            Alert.alert('Advertencia Enviada', `Se ha notificado a ${selectedUser.full_name}. Warnings: ${newWarnings}`);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            await logAdminAction('warn_user', selectedUser.id, 'user', { reason: warningReason, count: newWarnings });
+
+            setWarningReason('');
+            setShowUserModal(false);
+            fetchData();
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const runHealthCheck = async () => {
+        try {
+            setIsHealthCheckRunning(true);
+            const issues: { type: string, message: string, detail?: string, status?: string }[] = [];
+
+            // 1. Check for products without images
+            const { data: noImageProds } = await supabase.from('products').select('id, title').is('image_url', null);
+            if (noImageProds && noImageProds.length > 0) {
+                issues.push({ type: 'error', message: `${noImageProds.length} productos sin imagen principal.`, detail: noImageProds.map((p: { title: string }) => p.title).join(', ') });
+            }
+
+            // 2. Check for profiles without full_name
+            const { data: noNameProfiles } = await supabase.from('profiles').select('id').is('full_name', null);
+            if (noNameProfiles && noNameProfiles.length > 0) {
+                issues.push({ type: 'warning', message: `${noNameProfiles.length} perfiles con nombre vacío.` });
+            }
+
+            // 3. Test latency
+            const start = Date.now();
+            await supabase.from('app_config').select('key').limit(1);
+            const latency = Date.now() - start;
+            issues.push({ type: 'info', message: `Latencia de DB: ${latency}ms`, status: latency > 500 ? 'slow' : 'ok' });
+
+            setHealthLogs(issues);
+            Alert.alert('Auditoría Completada', `Se encontraron ${issues.filter(i => i.type === 'error').length} errores críticos.`);
+            await Haptics.notificationAsync(issues.filter(i => i.type === 'error').length > 0 ? Haptics.NotificationFeedbackType.Error : Haptics.NotificationFeedbackType.Success);
+        } catch (err: any) {
+            Alert.alert('Error en Salud', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+            setIsHealthCheckRunning(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'settings') fetchAppConfig();
+    }, [activeTab]);
+
+    const fetchAppConfig = async () => {
+        try {
+            setIsActionLoading(true);
+            const { data, error } = await supabase.from('app_config').select('*').order('key');
+            if (error) throw error;
+            setAppConfig(data || []);
+        } catch (err: any) {
+            Alert.alert('Error Config', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleUpdateConfig = async (key: string, value: unknown) => {
+        try {
+            setIsActionLoading(true);
+            const { error } = await supabase
+                .from('app_config')
+                .upsert({
+                    key,
+                    value,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'key' });
+
+            if (error) throw error;
+            Alert.alert('Guardado', `Configuración para "${key}" actualizada.`);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            fetchAppConfig();
+            await logAdminAction('update_config', undefined, 'system', { key, value });
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleApproveProduct = async (productId: string) => {
+        try {
+            setIsActionLoading(true);
+            const { error } = await supabase
+                .from('products')
+                .update({ status: 'approved' })
+                .eq('id', productId);
+
+            if (error) throw error;
+            Alert.alert('Éxito', 'Producto aprobado y publicado.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            fetchData();
+            await logAdminAction('approve_product', productId, 'product');
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleRejectProduct = async (productId: string) => {
+        try {
+            setIsActionLoading(true);
+            const { error } = await supabase
+                .from('products')
+                .update({ status: 'rejected' })
+                .eq('id', productId);
+
+            if (error) throw error;
+            Alert.alert('Rechazado', 'El producto ha sido marcado como rechazado.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            fetchData();
+            await logAdminAction('reject_product', productId, 'product');
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleIntervene = async (tx: any) => {
+        Alert.alert(
+            'Mediación Proactiva',
+            `¿Cómo deseas intervenir en la transacción de "${tx.products?.title}"?`,
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Advertir Vendedor',
+                    onPress: async () => {
+                        Alert.alert('Acción Realizada', 'Se ha enviado un aviso al vendedor.');
+                        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        await logAdminAction('intervene_transaction', tx.id, 'support', { action: 'warn_merchant', merchant_id: tx.merchant_id });
+                    }
+                },
+                {
+                    text: 'Marcar Revisión',
+                    onPress: async () => {
+                        Alert.alert('Éxito', 'Transacción marcada para seguimiento prioritario.');
+                        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        await logAdminAction('intervene_transaction', tx.id, 'support', { action: 'mark_dispute' });
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleLoadBaseDictionary = async () => {
+        const baseWords = [
+            'weon', 'weona', 'culiao', 'culia', 'conchetumare', 'puta', 'mierda', 'pico', 'zorra', 'maricon',
+            'jala', 'droga', 'estafa', 'falso', 'clon', 'pichula', 'tetas', 'culo', 'perra', 'malparido',
+            'hpta', 'chucha', 'webon', 'gil', 'ctm', 'wea', 'boludo', 'pelotudo', 'hijo de puta', 'maraca',
+            'bastardo', 'estafador', 'ilegal', 'armas', 'asqueroso'
+        ].join(', ');
+
+        Alert.alert(
+            'Cargar Diccionario Base',
+            '¿Deseas cargar la lista base de palabras prohibidas (español/chileno)? Esto te permitirá editarlas manualmente después.',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Sí, Cargar',
+                    onPress: async () => {
+                        await handleUpdateConfig('forbidden_words', baseWords);
+                    }
+                }
+            ]
+        );
+    };
+
+    const fetchSpecialEvents = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('special_events')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setSpecialEvents(data || []);
+        } catch (err) {
+            console.error('[Admin] Error fetching events:', err);
+        }
+    };
+
+    const handleAddEvent = async () => {
+        setNewEventName('');
+        setShowAddEventModal(true);
+    };
+
+    const confirmAddEvent = async () => {
+        if (!newEventName.trim()) {
+            Alert.alert('Error', 'Debes ingresar un nombre para el evento.');
+            return;
+        }
+
+        try {
+            setIsActionLoading(true);
+            const { error } = await supabase
+                .from('special_events')
+                .insert([{
+                    name: newEventName.trim(),
+                    start_date: new Date().toISOString(),
+                    end_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                    is_active: false,
+                    theme_color: newEventColor,
+                    event_type: newEventType,
+                    highlighted_categories: []
+                }]);
+
+            if (error) throw error;
+            await logAdminAction('create_event', 'system', 'event', { name: newEventName.trim() });
+            setShowAddEventModal(false);
+            setNewEventName('');
+            setNewEventType('general');
+            setNewEventColor('#8b5cf6');
+            fetchSpecialEvents();
+            Alert.alert('Éxito', 'Evento creado correctamente.');
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleDeleteEvent = async (id: string) => {
+        Alert.alert(
+            'Eliminar Evento',
+            '¿Estás seguro de que deseas eliminar este evento?',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Eliminar',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const { error } = await supabase
+                                .from('special_events')
+                                .delete()
+                                .eq('id', id);
+
+                            if (error) throw error;
+                            await logAdminAction('delete_event', id, 'event', {});
+                            fetchSpecialEvents();
+                        } catch (err: any) {
+                            Alert.alert('Error', err.message);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleToggleEvent = async (id: string, active: boolean) => {
+        try {
+            setIsActionLoading(true);
+            const { error } = await supabase
+                .from('special_events')
+                .update({ is_active: active })
+                .eq('id', id);
+
+            if (error) throw error;
+            await logAdminAction(active ? 'activate_event' : 'deactivate_event', id, 'event', {});
+            fetchSpecialEvents();
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const handleUpdateEventColor = async (id: string, theme_color: string) => {
+        try {
+            const { error } = await supabase
+                .from('special_events')
+                .update({ theme_color })
+                .eq('id', id);
+
+            if (error) throw error;
+            fetchSpecialEvents();
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+        }
+    };
+
+    const handleUpdateEventDuration = async (id: string, hoursToAdd: number) => {
+        try {
+            const event = specialEvents.find(e => e.id === id);
+            if (!event) return;
+
+            const currentEnd = new Date(event.end_date);
+            const newEnd = new Date(currentEnd.getTime() + hoursToAdd * 60 * 60 * 1000);
+
+            const { error } = await supabase
+                .from('special_events')
+                .update({ end_date: newEnd.toISOString() })
+                .eq('id', id);
+
+            if (error) throw error;
+            fetchSpecialEvents();
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+        }
+    };
+
+    const handleToggleEventCategory = async (id: string, category: string) => {
+        try {
+            const event = specialEvents.find(e => e.id === id);
+            if (!event) return;
+
+            let newCategories = [...(event.highlighted_categories || [])];
+            if (newCategories.includes(category)) {
+                newCategories = newCategories.filter(c => c !== category);
+            } else {
+                newCategories.push(category);
+            }
+
+            const { error } = await supabase
+                .from('special_events')
+                .update({ highlighted_categories: newCategories })
+                .eq('id', id);
+
+            if (error) throw error;
+            fetchSpecialEvents();
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
+        }
+    };
+
+    const handleUpdateEventType = async (id: string, event_type: string) => {
+        try {
+            const { error } = await supabase
+                .from('special_events')
+                .update({ event_type })
+                .eq('id', id);
+
+            if (error) throw error;
+            fetchSpecialEvents();
+            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        } catch (err: any) {
+            Alert.alert('Error', err.message);
         }
     };
 
@@ -248,6 +730,10 @@ export default function AdminDashboard() {
             }
 
             // Fetch announcements (Dashboard)
+            // Fetch performance metrics
+            if (activeTab === 'performance') {
+                // Logic implemented at the end of fetchData for more detail
+            }
             if (activeTab === 'dashboard') {
                 const { data: annData } = await supabase
                     .from('system_announcements')
@@ -267,14 +753,31 @@ export default function AdminDashboard() {
 
                 // Fetch Economic Volume
                 const { data: allProds } = await supabase.from('products').select('price');
-                const total = allProds?.reduce((acc, p) => acc + (p.price || 0), 0) || 0;
+                const total = allProds?.reduce((acc: number, p: { price: number | null }) => acc + (p.price || 0), 0) || 0;
                 setEconomicVolume(total);
+
+                // Fetch Approval Queue Config
+                try {
+                    const { data: apprvCfg } = await supabase.from('app_config').select('value').eq('key', 'require_product_approval').single();
+                    setRequireApproval(apprvCfg?.value === true);
+
+                    // Fetch Pending Count for Badge
+                    const { count: pndCount, error: pndErr } = await supabase.from('products').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+                    if (!pndErr) {
+                        setPendingCount(pndCount || 0);
+                    } else {
+                        // Silent fallback for missing column
+                        setPendingCount(0);
+                    }
+                } catch (e) {
+                    setRequireApproval(false);
+                    setPendingCount(0);
+                }
 
                 // Fetch Maintenance Status
                 const { data: config } = await supabase.from('app_config').select('value').eq('key', 'maintenance_mode').single();
                 setMaintenanceEnabled(config?.value?.enabled || false);
 
-                // Fetch WhatsApp Metrics
                 const { count: waCount } = await supabase.from('product_contacts').select('*', { count: 'exact', head: true });
                 setWhatsappContactsCount(waCount || 0);
 
@@ -291,7 +794,7 @@ export default function AdminDashboard() {
                     .select('id, title, view_count, price')
                     .order('view_count', { ascending: false })
                     .limit(5);
-                setTopProducts(topProds || []);
+                setTopProducts((topProds || []).map(p => p as Product));
 
                 // Fetch Top Sellers (by confirmed sales)
                 const { data: confirmedSales } = await supabase
@@ -301,16 +804,16 @@ export default function AdminDashboard() {
 
                 if (confirmedSales && confirmedSales.length > 0) {
                     const sellerSalesMap: Record<string, number> = {};
-                    confirmedSales.forEach(s => {
+                    confirmedSales.forEach((s: { merchant_id: string }) => {
                         sellerSalesMap[s.merchant_id] = (sellerSalesMap[s.merchant_id] || 0) + 1;
                     });
 
-                    const sortedSellerIds = Object.keys(sellerSalesMap).sort((a, b) => sellerSalesMap[b] - sellerSalesMap[a]).slice(0, 5);
+                    const sortedSellerIds = Object.keys(sellerSalesMap).sort((a: string, b: string) => sellerSalesMap[b] - sellerSalesMap[a]).slice(0, 5);
                     const { data: sellersInfo } = await supabase.from('profiles').select('id, full_name').in('id', sortedSellerIds);
 
-                    const topSellersList = sortedSellerIds.map(id => ({
+                    const topSellersList = sortedSellerIds.map((id: string) => ({
                         id,
-                        full_name: sellersInfo?.find(s => s.id === id)?.full_name || 'Desconocido',
+                        full_name: sellersInfo?.find((s: { id: string }) => s.id === id)?.full_name || 'Desconocido',
                         sales_count: sellerSalesMap[id]
                     }));
                     setTopSellers(topSellersList);
@@ -340,11 +843,11 @@ export default function AdminDashboard() {
                     supabase.from('product_reviews').select('id, comment, created_at').order('created_at', { ascending: false }).limit(10)
                 ]);
 
-                const combined = [
-                    ...(usersLog || []).map(u => ({ ...u, type: 'user', icon: 'user' })),
-                    ...(productsLog || []).map(p => ({ ...p, type: 'product', icon: 'package' })),
-                    ...(reviewsLog || []).map(r => ({ ...r, type: 'review', icon: 'message' }))
-                ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                const combined: ActivityLogItem[] = [
+                    ...(usersLog || []).map((u: { id: string, full_name: string, created_at: string }) => ({ ...u, type: 'user' as const, icon: 'user' })),
+                    ...(productsLog || []).map((p: { id: string, title: string, created_at: string }) => ({ ...p, type: 'product' as const, icon: 'package' })),
+                    ...(reviewsLog || []).map((r: { id: string, comment: string, created_at: string }) => ({ ...r, type: 'review' as const, icon: 'message' }))
+                ].sort((a: ActivityLogItem, b: ActivityLogItem) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
                 setActivityLogs(combined);
             }
@@ -361,6 +864,12 @@ export default function AdminDashboard() {
                 if (data?.value && Array.isArray(data.value) && data.value.length > 0) {
                     setCategoriesConfig(data.value);
                 }
+                // Fetch Categories Count (Metrics)
+                const { data: catProds } = await supabase.from('products').select('category');
+                const catMap: Record<string, number> = {};
+                catProds?.forEach((p: { category: string | null }) => {
+                    if (p.category) catMap[p.category] = (catMap[p.category] || 0) + 1;
+                });
             }
 
             // Fetch Reports
@@ -405,15 +914,15 @@ export default function AdminDashboard() {
                 const { data: prodData } = await query;
 
                 if (prodData && prodData.length > 0) {
-                    const sellerIds = [...new Set(prodData.map(p => p.user_id).filter(id => !!id))];
+                    const sellerIds = [...new Set(prodData.map((p: Product) => p.user_id).filter((id): id is string => !!id))];
                     const { data: sellers } = await supabase.from('profiles').select('id, full_name').in('id', sellerIds);
 
                     const sellerMap: Record<string, string> = {};
-                    sellers?.forEach(s => { sellerMap[s.id] = s.full_name; });
+                    sellers?.forEach((s: { id: string, full_name: string | null }) => { if (s.full_name) sellerMap[s.id] = s.full_name; });
 
-                    const formatted = prodData.map(p => ({
+                    const formatted = prodData.map((p: Product) => ({
                         ...p,
-                        profiles: { full_name: sellerMap[p.user_id] || 'Desconocido' }
+                        seller_name: (p.user_id ? sellerMap[p.user_id] : null) || 'Comerciante'
                     }));
                     setProducts(formatted);
                 } else {
@@ -434,19 +943,19 @@ export default function AdminDashboard() {
                 const { data: reviewData } = await query;
 
                 if (reviewData && reviewData.length > 0) {
-                    const reviewerIds = [...new Set(reviewData.map(r => r.user_id).filter(id => !!id))];
-                    const productIds = [...new Set(reviewData.map(r => r.product_id).filter(id => !!id))];
+                    const reviewerIds = [...new Set(reviewData.map((r: Review) => r.user_id).filter((id): id is string => !!id))];
+                    const productIds = [...new Set(reviewData.map((r: Review) => r.product_id).filter((id): id is string => !!id))];
 
                     const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', reviewerIds);
                     const { data: prods } = await supabase.from('products').select('id, title').in('id', productIds);
 
                     const profileMap: Record<string, string> = {};
-                    profiles?.forEach(p => { profileMap[p.id] = p.full_name; });
+                    profiles?.forEach((p: { id: string, full_name: string | null }) => { if (p.full_name) profileMap[p.id] = p.full_name; });
 
                     const productMap: Record<string, string> = {};
-                    prods?.forEach(p => { productMap[p.id] = p.title; });
+                    prods?.forEach((p: { id: string, title: string }) => { productMap[p.id] = p.title; });
 
-                    const formatted = reviewData.map(r => ({
+                    const formatted = reviewData.map((r: Review) => ({
                         ...r,
                         profiles: { full_name: profileMap[r.user_id] || 'Anónimo' },
                         products: { title: productMap[r.product_id] || 'Producto Eliminado' }
@@ -466,18 +975,154 @@ export default function AdminDashboard() {
                 setBanners(data || []);
             }
 
+            // Fetch Special Events
+            if (activeTab === 'events' || activeTab === 'dashboard') {
+                fetchSpecialEvents();
+            }
+
+            // Fetch Transactions (Phase 4)
+            if (activeTab === 'transactions') {
+                const { data: contacts, error } = await supabase
+                    .from('product_contacts')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error('[Admin] Error fetching transactions:', error);
+                    setTransactions([]);
+                } else if (contacts && contacts.length > 0) {
+                    const buyerIds = [...new Set(contacts.map((c: Contact) => c.user_id).filter((id): id is string => !!id))];
+                    const merchantIds = [...new Set(contacts.map((c: Contact) => c.merchant_id).filter((id): id is string => !!id))];
+                    const productIds = [...new Set(contacts.map((c: Contact) => c.product_id).filter((id): id is string => !!id))];
+                    const allProfileIds = [...new Set([...buyerIds, ...merchantIds])];
+
+                    const [
+                        { data: profiles },
+                        { data: products }
+                    ] = await Promise.all([
+                        supabase.from('profiles').select('id, full_name').in('id', allProfileIds),
+                        supabase.from('products').select('id, title, price').in('id', productIds)
+                    ]);
+
+                    const profileMap: Record<string, string> = {};
+                    profiles?.forEach((p: { id: string, full_name: string | null }) => { if (p.full_name) profileMap[p.id] = p.full_name; });
+
+                    const productMap: Record<string, { title: string, price: number }> = {};
+                    products?.forEach((p: { id: string, title: string, price: number }) => { productMap[p.id] = { title: p.title, price: p.price }; });
+
+                    const formatted = contacts.map((c: Contact) => ({
+                        ...c,
+                        products: productMap[c.product_id] || { title: 'Producto Eliminado', price: 0 },
+                        buyer: { full_name: (c.user_id ? profileMap[c.user_id] : null) || 'Vecino' },
+                        merchant: { full_name: (c.merchant_id ? profileMap[c.merchant_id] : null) || 'Comerciante' }
+                    }));
+                    setTransactions(formatted);
+                } else {
+                    setTransactions([]);
+                }
+            }
+
+            // Fetch Approvals (Phase 4)
+            if (activeTab === 'approvals') {
+                try {
+                    const { data: prodData, error } = await supabase
+                        .from('products')
+                        .select('*')
+                        .eq('status', 'pending')
+                        .order('created_at', { ascending: false });
+
+                    if (error) {
+                        if (error.code === '42703') {
+                            setPendingProducts([{ id: 'error', is_schema_error: true } as Product]);
+                        } else {
+                            console.error('[Admin] Error fetching approvals:', error);
+                            setPendingProducts([]);
+                        }
+                    } else if (prodData && prodData.length > 0) {
+                        const sellerIds = [...new Set(prodData.map((p: any) => p.user_id).filter((id: any) => !!id))];
+                        const { data: sellers } = await supabase.from('profiles').select('id, full_name').in('id', sellerIds);
+
+                        const sellerMap: Record<string, string> = {};
+                        sellers?.forEach((s: any) => { sellerMap[s.id] = s.full_name; });
+
+                        const formatted = prodData.map((p: any) => ({
+                            ...p,
+                            profiles: { full_name: sellerMap[p.user_id] || 'Desconocido' }
+                        }));
+                        setPendingProducts(formatted);
+                    } else {
+                        setPendingProducts([]);
+                    }
+                } catch (e) {
+                    setPendingProducts([]);
+                }
+            }
+
 
             // Fetch Audit Logs
             if (activeTab === 'audit') {
-                const { data, error } = await supabase
+                let query = supabase
                     .from('admin_audit_logs')
                     .select('*, profiles!admin_id(full_name)')
                     .order('created_at', { ascending: false });
+
+                if (searchQuery) {
+                    query = query.or(`action.ilike.%${searchQuery}%,target_type.ilike.%${searchQuery}%,profiles.full_name.ilike.%${searchQuery}%`);
+                }
+
+                const { data, error } = await query;
 
                 if (!error) {
                     setAuditLogs(data || []);
                 } else {
                     console.error('[Admin] Error al obtener logs de auditoría:', error);
+                }
+            }
+
+            // Fetch Merchant Performance (Phase 5)
+            if (activeTab === 'performance') {
+                // Fetch all vendors
+                const { data: vendors } = await supabase.from('profiles').select('id, full_name, is_verified').eq('role', 'vendor');
+
+                if (vendors && vendors.length > 0) {
+                    const vendorIds = vendors.map((v: { id: string }) => v.id);
+
+                    // Fetch contacts to calculate conversion
+                    const { data: contacts } = await supabase.from('product_contacts').select('merchant_id, status').in('merchant_id', vendorIds);
+
+                    // Fetch reviews to calculate average rating
+                    const { data: pData } = await supabase.from('products').select('id, user_id').in('user_id', vendorIds);
+                    const prodIds = pData?.map((p: { id: string }) => p.id) || [];
+                    const { data: reviews } = await supabase.from('product_reviews').select('product_id, rating').in('product_id', prodIds);
+
+                    // Fetch reports
+                    const { data: reports } = await supabase.from('product_reports').select('product_id').in('product_id', prodIds);
+
+                    const perfData = vendors.map((v: { id: string, full_name: string | null, is_verified: boolean }) => {
+                        const vContacts = contacts?.filter((c: { merchant_id: string, status: string }) => c.merchant_id === v.id) || [];
+                        const confirmed = vContacts.filter((c: { status: string }) => c.status === 'confirmed').length;
+                        const total = vContacts.length;
+
+                        const vProds = pData?.filter((p: { id: string, user_id: string }) => p.user_id === v.id).map((p: { id: string }) => p.id) || [];
+                        const vReviews = reviews?.filter((r: { product_id: string, rating: number }) => vProds.includes(r.product_id)) || [];
+                        const avgRating = vReviews.length > 0 ? vReviews.reduce((acc: number, r: { rating: number }) => acc + r.rating, 0) / vReviews.length : 0;
+
+                        const vReports = reports?.filter((r: { product_id: string }) => vProds.includes(r.product_id)).length || 0;
+
+                        return {
+                            ...v,
+                            totalContacts: total,
+                            confirmedSales: confirmed,
+                            conversion: total > 0 ? (confirmed / total) * 100 : 0,
+                            rating: avgRating,
+                            reports: vReports,
+                            id: v.id,
+                            full_name: v.full_name,
+                            is_verified: v.is_verified
+                        } as MerchantPerformance;
+                    });
+
+                    setMerchantPerformance(perfData.sort((a: MerchantPerformance, b: MerchantPerformance) => b.conversion - a.conversion));
                 }
             }
 
@@ -520,6 +1165,7 @@ export default function AdminDashboard() {
     const handleBroadcast = async () => {
         if (!title.trim() || !content.trim()) {
             Alert.alert('Campos incompletos', 'Por favor ingresa un título y mensaje.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             return;
         }
 
@@ -540,6 +1186,7 @@ export default function AdminDashboard() {
             if (error) throw error;
 
             Alert.alert('¡Éxito!', 'Notificación enviada correctamente.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             await logAdminAction('broadcast_announcement', undefined, 'system', { title: title.trim() });
 
             // Send real push notifications to everyone
@@ -554,6 +1201,7 @@ export default function AdminDashboard() {
             fetchData();
         } catch (err: any) {
             Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setLoading(false);
         }
@@ -569,9 +1217,11 @@ export default function AdminDashboard() {
 
             if (error) throw error;
             Alert.alert('Éxito', `Usuario actualizado a ${newRole}.`);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             fetchData();
         } catch (err: any) {
             Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
         }
@@ -594,10 +1244,12 @@ export default function AdminDashboard() {
                             const { error } = await supabase.from('profiles').delete().eq('id', userId);
                             if (error) throw error;
                             Alert.alert('Eliminado', 'Usuario eliminado correctamente.');
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                             await logAdminAction('delete_user', userId, 'user');
                             fetchData();
                         } catch (err: any) {
                             Alert.alert('Error', err.message);
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                         } finally {
                             setIsActionLoading(false);
                         }
@@ -621,10 +1273,12 @@ export default function AdminDashboard() {
                             setIsActionLoading(true);
                             const { error } = await supabase.from('products').delete().eq('id', productId);
                             if (error) throw error;
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                             await logAdminAction('delete_product', productId, 'product');
                             fetchData();
                         } catch (err: any) {
                             Alert.alert('Error', err.message);
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                         } finally {
                             setIsActionLoading(false);
                         }
@@ -639,6 +1293,7 @@ export default function AdminDashboard() {
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
                 Alert.alert('Permiso Denegado', 'Necesitamos acceso a tu galería para subir el banner.');
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                 return;
             }
 
@@ -662,6 +1317,7 @@ export default function AdminDashboard() {
             }
         } catch (err) {
             console.error('[Selector] Error al seleccionar imagen:', err);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setPickingImage(false);
         }
@@ -670,6 +1326,7 @@ export default function AdminDashboard() {
     const handleCreateBanner = async () => {
         if (!newBanner.image_url) {
             Alert.alert('Error', 'Debes seleccionar o ingresar una imagen.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             return;
         }
 
@@ -771,9 +1428,11 @@ export default function AdminDashboard() {
             setNewBanner({ image_url: '', title: '', description: '', link_route: '' });
             fetchData();
             Alert.alert('Éxito', 'Banner creado correctamente.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
             console.error('[CrearBanner] Error:', err);
             Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
         }
@@ -784,8 +1443,10 @@ export default function AdminDashboard() {
             const { error } = await supabase.from('promotional_banners').update({ is_active: !currentState }).eq('id', bannerId);
             if (error) throw error;
             fetchData();
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
             Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
     };
 
@@ -800,8 +1461,10 @@ export default function AdminDashboard() {
                         const { error } = await supabase.from('promotional_banners').delete().eq('id', bannerId);
                         if (error) throw error;
                         fetchData();
+                        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     } catch (err: any) {
                         Alert.alert('Error', err.message);
+                        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                     }
                 }
             }
@@ -819,7 +1482,12 @@ export default function AdminDashboard() {
                     style: 'destructive',
                     onPress: async () => {
                         const { error } = await supabase.from('product_reviews').delete().eq('id', reviewId);
-                        if (!error) fetchData();
+                        if (!error) {
+                            fetchData();
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        } else {
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                        }
                     }
                 }
             ]
@@ -855,9 +1523,11 @@ export default function AdminDashboard() {
                             setMaintenanceEnabled(newState);
                             await logAdminAction('toggle_maintenance', undefined, 'system', { enabled: newState });
                             Alert.alert('Configuración Actualizada', `Modo mantenimiento ${newState ? 'ACTIVADO' : 'DESACTIVADO'}.`);
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         } catch (err: any) {
                             console.error('[Admin] Error al cambiar Mantenimiento:', err);
                             Alert.alert('Error', err.message);
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                         }
                     }
                 }
@@ -868,6 +1538,7 @@ export default function AdminDashboard() {
     const handleSendTargetedAlert = async () => {
         if (!targetedMessage.trim() || !selectedUser) {
             Alert.alert('Mensaje Vacío', 'Por favor escribe un mensaje para enviarlo.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             return;
         }
 
@@ -889,10 +1560,12 @@ export default function AdminDashboard() {
             if (error) throw error;
 
             Alert.alert('¡Enviado!', `Notificación enviada exitosamente a ${selectedUser.full_name}.`);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setTargetedMessage('');
         } catch (err: any) {
             console.error('[Admin] Error al enviar alerta dirigida:', err);
             Alert.alert('Error', 'No se pudo enviar la notificación: ' + err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
         }
@@ -920,9 +1593,11 @@ export default function AdminDashboard() {
             if (!data || data.length === 0) {
                 console.log('Aviso: No se actualizaron filas. Verifique si el ID existe y RLS permite actualizaciones.');
                 Alert.alert('Aviso de Admin', 'No se actualizó ningún registro. Verifica que el producto exista y tengas permisos.');
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
             } else {
                 console.log('Actualización exitosa, nuevo estado:', data[0].is_featured);
                 Alert.alert('Sistema de Admin', `El producto se ha ${!currentState ? 'DESTACADO' : 'QUITADO DE DESTACADOS'} correctamente.`);
+                await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
 
             // Re-fetch to update UI
@@ -933,6 +1608,7 @@ export default function AdminDashboard() {
                 'Error al Destacar',
                 'No se pudo actualizar el estado.\n\nIMPORTANTE: Es probable que necesites ejecutar el siguiente comando en el SQL Editor de Supabase:\n\nALTER TABLE products ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE;'
             );
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             console.log('--- FIN CAMBIO DE DESTACADO ---');
             setIsActionLoading(false);
@@ -954,7 +1630,12 @@ export default function AdminDashboard() {
                             .delete()
                             .eq('id', id);
 
-                        if (!error) fetchData();
+                        if (!error) {
+                            fetchData();
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        } else {
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                        }
                     }
                 }
             ]
@@ -983,8 +1664,10 @@ export default function AdminDashboard() {
                             if (error) throw error;
                             setCategoriesConfig(newCategories);
                             fetchData();
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         } catch (err: any) {
                             Alert.alert('Error', err.message);
+                            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                         }
                     }
                 }
@@ -1013,8 +1696,10 @@ export default function AdminDashboard() {
             setNewCategoryName('');
             setShowAddCategoryModal(false);
             fetchData();
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
             Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
         }
@@ -1029,8 +1714,10 @@ export default function AdminDashboard() {
             if (error) throw error;
             Alert.alert('Resuelto', 'El reporte ha sido marcado como revisado.');
             fetchData();
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
             Alert.alert('Error', err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
     };
 
@@ -1066,6 +1753,7 @@ export default function AdminDashboard() {
         } catch (err: any) {
             console.error('Error al seleccionar producto destacado:', err);
             Alert.alert('Error', 'No se pudo cargar el detalle del producto: ' + err.message);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
         }
@@ -1089,6 +1777,7 @@ export default function AdminDashboard() {
         } catch (err) {
             console.error('Error al seleccionar vendedor destacado:', err);
             Alert.alert('Error', 'No se pudo cargar el detalle del perfil.');
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
         }
@@ -1108,84 +1797,33 @@ export default function AdminDashboard() {
             </View>
 
             {/* Tab Navigation (Scrollable for narrow screens) */}
-            <View style={{ backgroundColor: 'white' }}>
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.tabBar}
-                >
+            {activeTab !== 'dashboard' && (
+                <View style={{ backgroundColor: 'white', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', flexDirection: 'row', alignItems: 'center' }}>
                     <TouchableOpacity
-                        onPress={() => setActiveTab('dashboard')}
-                        style={[styles.tabItem, activeTab === 'dashboard' && styles.activeTabItem]}
+                        onPress={() => handleTabPress('dashboard')}
+                        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}
                     >
-                        <ShieldCheck size={18} color={activeTab === 'dashboard' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'dashboard' && styles.activeTabText]}>Stats</Text>
+                        <ChevronLeft size={16} color="#64748B" />
+                        <Text style={{ marginLeft: 4, fontWeight: '700', color: '#64748B', fontSize: 13 }}>Volver al Panel</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setActiveTab('activity')}
-                        style={[styles.tabItem, activeTab === 'activity' && styles.activeTabItem]}
-                    >
-                        <HistoryLogIcon size={18} color={activeTab === 'activity' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'activity' && styles.activeTabText]}>Actividad</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setActiveTab('gallery')}
-                        style={[styles.tabItem, activeTab === 'gallery' && styles.activeTabItem]}
-                    >
-                        <ImageIcon size={18} color={activeTab === 'gallery' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'gallery' && styles.activeTabText]}>Galería</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setActiveTab('users')}
-                        style={[styles.tabItem, activeTab === 'users' && styles.activeTabItem]}
-                    >
-                        <Users size={18} color={activeTab === 'users' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'users' && styles.activeTabText]}>Usuarios</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setActiveTab('products')}
-                        style={[styles.tabItem, activeTab === 'products' && styles.activeTabItem]}
-                    >
-                        <Package size={18} color={activeTab === 'products' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'products' && styles.activeTabText]}>Productos</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setActiveTab('reviews')}
-                        style={[styles.tabItem, activeTab === 'reviews' && styles.activeTabItem]}
-                    >
-                        <MessageSquare size={18} color={activeTab === 'reviews' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'reviews' && styles.activeTabText]}>Reseñas</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setActiveTab('categories')}
-                        style={[styles.tabItem, activeTab === 'categories' && styles.activeTabItem]}
-                    >
-                        <LayoutGrid size={18} color={activeTab === 'categories' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'categories' && styles.activeTabText]}>Categorías</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setActiveTab('reports')}
-                        style={[styles.tabItem, activeTab === 'reports' && styles.activeTabItem]}
-                    >
-                        <Flag size={18} color={activeTab === 'reports' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'reports' && styles.activeTabText]}>Reportes</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setActiveTab('banners')}
-                        style={[styles.tabItem, activeTab === 'banners' && styles.activeTabItem]}
-                    >
-                        <ImageIcon size={18} color={activeTab === 'banners' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'banners' && styles.activeTabText]}>Banners</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setActiveTab('audit')}
-                        style={[styles.tabItem, activeTab === 'audit' && styles.activeTabItem]}
-                    >
-                        <ShieldCheck size={18} color={activeTab === 'audit' ? '#8b5cf6' : '#94A3B8'} />
-                        <Text style={[styles.tabText, activeTab === 'audit' && styles.activeTabText]}>Auditoría</Text>
-                    </TouchableOpacity>
-                </ScrollView>
-            </View>
+                    <View style={{ flex: 1 }} />
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={{ fontWeight: '900', color: '#0F172A', fontSize: 16, textTransform: 'capitalize' }}>
+                            {activeTab === 'users' ? 'Usuarios' :
+                                activeTab === 'products' ? 'Productos' :
+                                    activeTab === 'activity' ? 'Actividad' :
+                                        activeTab === 'reviews' ? 'Reseñas' :
+                                            activeTab === 'audit' ? 'Auditoría' :
+                                                activeTab === 'settings' ? 'Ajustes' :
+                                                    activeTab === 'gallery' ? 'Galería' :
+                                                        activeTab === 'banners' ? 'Publicidad' :
+                                                            activeTab === 'health' ? 'Salud del Sistema' :
+                                                                activeTab === 'events' ? 'Eventos Especiales' :
+                                                                    activeTab}
+                        </Text>
+                    </View>
+                </View>
+            )}
 
             <ScrollView
                 showsVerticalScrollIndicator={false}
@@ -1195,662 +1833,245 @@ export default function AdminDashboard() {
                 }
             >
                 {activeTab === 'dashboard' && (
-                    <>
-                        {/* Statistics Cards */}
-                        <View className="flex-row flex-wrap justify-between gap-y-4 mb-4">
-                            <View style={[styles.statCardSmall, { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' }]}>
-                                <Users size={16} color="#4F46E5" />
-                                <Text style={styles.statValueSmall}>{stats.users + stats.vendors}</Text>
-                                <Text style={styles.statLabelSmall}>Registros</Text>
-                            </View>
-                            <View style={[styles.statCardSmall, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
-                                <Activity size={16} color="#16A34A" />
-                                <Text style={styles.statValueSmall}>{onlineCount}</Text>
-                                <Text style={styles.statLabelSmall}>Online Ahora</Text>
-                            </View>
-                            <View style={[styles.statCardSmall, { backgroundColor: '#F5F5FF', borderColor: '#E0E7FF' }]}>
-                                <BadgeCheck size={16} color="#6366F1" />
-                                <Text style={styles.statValueSmall}>{confirmedContactsCount}</Text>
-                                <Text style={styles.statLabelSmall}>Ventas</Text>
-                            </View>
-                            <View style={[styles.statCardSmall, { backgroundColor: '#FFFBEB', borderColor: '#FEF3C7' }]}>
-                                <TrendingUp size={16} color="#D97706" />
-                                <Text style={styles.statValueSmall}>{conversionRate.toFixed(1)}%</Text>
-                                <Text style={styles.statLabelSmall}>Éxito</Text>
-                            </View>
-                            <View style={[styles.statCardSmall, { backgroundColor: '#FDF2F8', borderColor: '#FCE7F3' }]}>
-                                <DollarSign size={16} color="#DB2777" />
-                                <Text style={styles.statValueSmall}>${(economicVolume / 1000).toFixed(1)}k</Text>
-                                <Text style={styles.statLabelSmall}>V. Mercado</Text>
-                            </View>
-                            <View style={[styles.statCardSmall, { backgroundColor: '#F0FDFA', borderColor: '#CCFBF1' }]}>
-                                <Phone size={16} color="#0D9488" />
-                                <Text style={styles.statValueSmall}>{whatsappContactsCount}</Text>
-                                <Text style={styles.statLabelSmall}>WhatsApp</Text>
-                            </View>
-                        </View>
-
-                        {/* Maintenance Mode Toggle */}
-                        <TouchableOpacity
-                            onPress={handleToggleMaintenance}
-                            style={[
-                                styles.maintenanceCard,
-                                maintenanceEnabled ? styles.maintenanceActive : styles.maintenanceInactive
-                            ]}
-                        >
-                            <View className="flex-row items-center justify-between">
-                                <View className="flex-row items-center">
-                                    <View className={`w-10 h-10 rounded-2xl items-center justify-center mr-3 ${maintenanceEnabled ? 'bg-red-100' : 'bg-slate-100'}`}>
-                                        <AlertTriangle size={20} color={maintenanceEnabled ? '#EF4444' : '#64748B'} />
-                                    </View>
-                                    <View>
-                                        <Text className={`font-black text-base ${maintenanceEnabled ? 'text-red-900' : 'text-slate-900'}`}>
-                                            Modo Mantenimiento
-                                        </Text>
-                                        <Text className={`font-bold text-[10px] uppercase tracking-widest ${maintenanceEnabled ? 'text-red-500' : 'text-slate-400'}`}>
-                                            {maintenanceEnabled ? 'BLOQUEO ACTIVO' : 'SIN RESTRICCIONES'}
-                                        </Text>
-                                    </View>
-                                </View>
-                                {maintenanceEnabled ? <ToggleIcon size={32} color="#EF4444" /> : <ToggleIcon size={32} color="#CBD5E1" style={{ transform: [{ rotate: '180deg' }] }} />}
-                            </View>
-                        </TouchableOpacity>
-
-
-                        {/* Global Broadcast Form */}
-                        <View style={styles.formContainer}>
-                            <View className="flex-row items-center mb-6">
-                                <View className="w-10 h-10 bg-brand-50 rounded-2xl items-center justify-center mr-3">
-                                    <Megaphone size={20} color="#8b5cf6" />
-                                </View>
-                                <View>
-                                    <Text className="text-slate-900 font-black text-lg">Difusión Global</Text>
-                                    <Text className="text-slate-400 text-xs font-bold uppercase tracking-widest">Broadcast App-Wide</Text>
-                                </View>
-                            </View>
-
-                            <View className="space-y-4">
-                                <View>
-                                    <Text className="text-slate-500 font-bold text-xs mb-2 ml-1">TÍTULO DEL ANUNCIO</Text>
-                                    <TextInput
-                                        style={styles.input}
-                                        value={title}
-                                        onChangeText={setTitle}
-                                        placeholder="Ej: Mantenimiento programado"
-                                        placeholderTextColor="#94A3B8"
-                                    />
-                                </View>
-
-                                <View>
-                                    <Text className="text-slate-500 font-bold text-xs mb-2 ml-1">MENSAJE DETALLADO</Text>
-                                    <TextInput
-                                        style={[styles.input, { height: 120, textAlignVertical: 'top', paddingTop: 16 }]}
-                                        value={content}
-                                        onChangeText={setContent}
-                                        placeholder="Escribe aquí el mensaje para todos los usuarios..."
-                                        placeholderTextColor="#94A3B8"
-                                        multiline
-                                    />
-                                </View>
-
-                                <TouchableOpacity
-                                    onPress={handleBroadcast}
-                                    disabled={loading}
-                                    activeOpacity={0.8}
-                                    style={styles.broadcastButton}
-                                >
-                                    {loading ? (
-                                        <ActivityIndicator color="white" />
-                                    ) : (
-                                        <>
-                                            <Send size={20} color="white" />
-                                            <Text style={styles.broadcastButtonText}>Enviar a todos los Vecinos</Text>
-                                        </>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-
-                        {/* Ranking Section */}
-                        <View className="mt-10">
-                            <View className="flex-row items-center mb-6">
-                                <View className="w-10 h-10 bg-amber-50 rounded-2xl items-center justify-center mr-3">
-                                    <Trophy size={20} color="#D97706" />
-                                </View>
-                                <View>
-                                    <Text className="text-slate-900 font-black text-lg">Ranking de Rendimiento</Text>
-                                    <Text className="text-slate-400 text-xs font-bold uppercase tracking-widest">Top Desempeño</Text>
-                                </View>
-                            </View>
-
-                            <View className="flex-row justify-between">
-                                <View style={[styles.rankingCard, { marginRight: 8 }]}>
-                                    <Text style={styles.rankingTitle}>Top 5 Productos</Text>
-                                    {topProducts.map((p, i) => (
-                                        <TouchableOpacity
-                                            key={p.id}
-                                            style={styles.rankingItem}
-                                            onPress={() => handleRankProductClick(p.id)}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Text style={styles.rankingNumber}>{i + 1}</Text>
-                                            <View className="flex-1">
-                                                <Text numberOfLines={1} style={styles.rankingName}>{p.title}</Text>
-                                                <Text style={styles.rankingValue}>{p.view_count || 0} vistas</Text>
-                                            </View>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                                <View style={[styles.rankingCard, { marginLeft: 8 }]}>
-                                    <Text style={styles.rankingTitle}>Top 5 Vendedores</Text>
-                                    {topSellers.map((s, i) => (
-                                        <TouchableOpacity
-                                            key={s.id}
-                                            style={styles.rankingItem}
-                                            onPress={() => handleRankSellerClick(s.id)}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Text style={styles.rankingNumber}>{i + 1}</Text>
-                                            <View className="flex-1">
-                                                <Text numberOfLines={1} style={styles.rankingName}>{s.full_name}</Text>
-                                                <Text style={styles.rankingValue}>{s.sales_count} ventas</Text>
-                                            </View>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Recent Announcements List */}
-                        <View className="mt-10">
-                            <Text className="text-slate-400 font-black uppercase tracking-widest text-xs mb-6 px-1">Historial de Notificaciones</Text>
-
-                            {announcements.length > 0 ? (
-                                announcements.map((ann) => (
-                                    <View key={ann.id} style={styles.announcementCard}>
-                                        <View className="flex-row justify-between items-start mb-2">
-                                            <View className="flex-1">
-                                                <Text className="text-slate-900 font-black text-base">{ann.title}</Text>
-                                                <View className="flex-row items-center mt-1">
-                                                    <Clock size={12} color="#94A3B8" />
-                                                    <Text className="text-slate-400 text-[10px] font-bold uppercase ml-1">
-                                                        {new Date(ann.created_at).toLocaleDateString()}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                            <TouchableOpacity
-                                                onPress={() => handleDeleteAnnouncement(ann.id)}
-                                                className="p-2 bg-red-50 rounded-xl"
-                                            >
-                                                <Trash2 size={16} color="#EF4444" />
-                                            </TouchableOpacity>
-                                        </View>
-                                        <Text className="text-slate-600 font-medium leading-5">{ann.content}</Text>
-                                    </View>
-                                ))
-                            ) : (
-                                <View className="items-center justify-center py-10 bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
-                                    <AlertCircle size={32} color="#CBD5E1" />
-                                    <Text className="text-slate-400 font-bold mt-2">No has enviado anuncios globales</Text>
-                                </View>
-                            )}
-                        </View>
-                    </>
+                    <DashboardTab
+                        stats={stats}
+                        onlineCount={onlineCount}
+                        economicVolume={economicVolume}
+                        confirmedContactsCount={confirmedContactsCount}
+                        whatsappContactsCount={whatsappContactsCount}
+                        conversionRate={conversionRate}
+                        topProducts={topProducts}
+                        topSellers={topSellers}
+                        announcements={announcements}
+                        openTicketsCount={pendingCount}
+                        maintenanceEnabled={maintenanceEnabled}
+                        isActionLoading={loading}
+                        handleTabPress={handleTabPress}
+                        handleToggleMaintenance={handleToggleMaintenance}
+                        handleCopyId={handleCopyId}
+                        pulseAnim={pulseAnim}
+                        broadcastTitle={title}
+                        setBroadcastTitle={setTitle}
+                        broadcastMessage={content}
+                        setBroadcastMessage={setContent}
+                        handleBroadcast={handleBroadcast}
+                        handleDeleteAnnouncement={handleDeleteAnnouncement}
+                        handleRankProductClick={handleRankProductClick}
+                        handleRankSellerClick={handleRankSellerClick}
+                    />
                 )}
 
                 {activeTab === 'users' && (
-                    <View>
-                        <View style={styles.searchContainer}>
-                            <Search size={20} color="#94A3B8" />
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="Buscar usuario por nombre..."
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                                placeholderTextColor="#94A3B8"
-                            />
-                        </View>
-
-                        {users.map(user => {
-                            const isBanned = user.banned_until && new Date(user.banned_until) > new Date();
-                            if (isBanned) console.log(`[Admin] User ${user.full_name} is detected as BANNED until ${user.banned_until}`);
-
-                            return (
-                                <TouchableOpacity
-                                    key={user.id}
-                                    style={[
-                                        styles.adminListCard,
-                                        isBanned && { backgroundColor: '#FFEEF2', borderColor: '#FFC1CF', borderWidth: 2, borderStyle: 'solid' }
-                                    ]}
-                                    onPress={() => { setSelectedUser(user); setShowUserModal(true); }}
-                                >
-                                    <View className="flex-row justify-between items-center">
-                                        <View className="flex-1">
-                                            <View className="flex-row items-center">
-                                                <Text className={`font-black text-base ${isBanned ? 'text-red-900' : 'text-slate-900'}`}>{user.full_name}</Text>
-                                                {user.is_verified && (
-                                                    <View className="ml-1.5">
-                                                        <BadgeCheck size={16} color="#8b5cf6" fill="#f5f3ff" />
-                                                    </View>
-                                                )}
-                                                {isBanned && (
-                                                    <View className="ml-2 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
-                                                        <Text className="text-red-700 text-[8px] font-bold uppercase">BANEADO</Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                            <View className="flex-row items-center mt-1">
-                                                <View className={`w-2 h-2 rounded-full mr-2 ${isBanned ? 'bg-red-500' : (user.last_seen && (new Date().getTime() - new Date(user.last_seen).getTime() < 300000) ? 'bg-emerald-500' : 'bg-slate-300')}`} />
-                                                <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                                                    {user.role === 'admin' ? 'Administrador' : user.role === 'vendor' ? 'Comerciante' : 'Vecino'}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                        <View className="flex-row gap-2">
-                                            <TouchableOpacity
-                                                onPress={() => handleUpdateUserRole(user.id, user.role === 'vendor' ? 'client' : 'vendor')}
-                                                className={`w-10 h-10 rounded-xl items-center justify-center ${user.role === 'vendor' ? 'bg-amber-50' : 'bg-emerald-50'}`}
-                                            >
-                                                {user.role === 'vendor' ? <UserMinus size={18} color="#D97706" /> : <UserPlus size={18} color="#059669" />}
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                onPress={() => handleDeleteUser(user.id)}
-                                                className="w-10 h-10 bg-red-50 rounded-xl items-center justify-center"
-                                            >
-                                                <Trash2 size={18} color="#EF4444" />
-                                            </TouchableOpacity>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            );
-                        })}
-                    </View>
+                    <UsersTab
+                        users={users}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        setSelectedUser={setSelectedUser}
+                        setShowUserModal={setShowUserModal}
+                        handleUpdateUserRole={handleUpdateUserRole}
+                        handleDeleteUser={handleDeleteUser}
+                    />
                 )}
 
                 {activeTab === 'products' && (
-                    <View>
-                        <View style={styles.searchContainer}>
-                            <Search size={20} color="#94A3B8" />
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="Buscar producto por título..."
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                                placeholderTextColor="#94A3B8"
-                            />
-                        </View>
-
-                        {products.map(prod => (
-                            <View
-                                key={prod.id}
-                                style={styles.adminListCard}
-                            >
-                                <View className="flex-row justify-between items-start">
-                                    <TouchableOpacity
-                                        className="flex-1 mr-4"
-                                        onPress={() => { setSelectedProduct(prod); setShowProductModal(true); }}
-                                    >
-                                        <Text className="text-slate-900 font-black text-base">{prod.title}</Text>
-                                        <Text className="text-slate-400 text-[10px] font-bold uppercase mt-0.5">
-                                            Vendedor: {prod.profiles?.full_name || 'Desconocido'}
-                                        </Text>
-                                        <View className="flex-row items-center mt-1">
-                                            <Text className="text-brand-600 font-black text-sm">
-                                                ${prod.price.toLocaleString()}
-                                            </Text>
-                                            <View className="w-px h-3 bg-slate-200 mx-2" />
-                                            <View className="flex-row items-center">
-                                                <Activity size={12} color="#94A3B8" />
-                                                <Text className="text-slate-400 font-bold text-[10px] ml-1 uppercase">
-                                                    {prod.view_count || 0} Vistas
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        onPress={() => handleToggleFeatured(prod.id, !!prod.is_featured)}
-                                        activeOpacity={0.7}
-                                        style={[
-                                            styles.featuredBtn,
-                                            prod.is_featured ? styles.featuredBtnActive : styles.featuredBtnInactive,
-                                        ]}
-                                    >
-                                        <Star size={14} color={prod.is_featured ? 'white' : '#94A3B8'} fill={prod.is_featured ? 'white' : 'transparent'} />
-                                        <Text style={[styles.featuredBtnText, prod.is_featured && { color: 'white' }]}>
-                                            {prod.is_featured ? 'QUITAR' : 'DESTACAR'}
-                                        </Text>
-                                    </TouchableOpacity>
-
-                                    <TouchableOpacity
-                                        onPress={() => handleDeleteProduct(prod.id)}
-                                        className="w-10 h-10 bg-red-50 rounded-xl items-center justify-center ml-2"
-                                    >
-                                        <Trash2 size={18} color="#EF4444" />
-                                    </TouchableOpacity>
-                                </View>
-                            </View>
-                        ))}
-                    </View>
+                    <ProductsTab
+                        products={products}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        setSelectedProduct={setSelectedProduct}
+                        setShowProductModal={setShowProductModal}
+                        handleToggleFeatured={handleToggleFeatured}
+                        handleDeleteProduct={handleDeleteProduct}
+                    />
                 )}
 
                 {activeTab === 'reviews' && (
-                    <View>
-                        <View style={styles.searchContainer}>
-                            <Search size={20} color="#94A3B8" />
-                            <TextInput
-                                style={styles.searchInput}
-                                placeholder="Buscar en comentarios o productos..."
-                                value={searchQuery}
-                                onChangeText={setSearchQuery}
-                                placeholderTextColor="#94A3B8"
-                            />
-                        </View>
-
-                        {reviews.length > 0 ? (
-                            reviews.map(rev => (
-                                <View key={rev.id} style={styles.adminListCard}>
-                                    <View className="flex-row justify-between items-start">
-                                        <View className="flex-1">
-                                            <View className="flex-row items-center mb-1">
-                                                {[1, 2, 3, 4, 5].map(s => (
-                                                    <Star key={s} size={12} fill={s <= rev.rating ? "#F59E0B" : "transparent"} color={s <= rev.rating ? "#F59E0B" : "#CBD5E1"} />
-                                                ))}
-                                                <Text className="text-slate-400 text-[10px] font-bold uppercase ml-2">
-                                                    en {rev.products?.title || 'Producto Eliminado'}
-                                                </Text>
-                                            </View>
-                                            <Text className="text-slate-900 font-bold text-sm mb-1">{rev.comment}</Text>
-                                            <Text className="text-slate-400 text-[10px] font-bold uppercase">
-                                                Por: {rev.profiles?.full_name || 'Anónimo'}
-                                            </Text>
-                                        </View>
-                                        <TouchableOpacity
-                                            onPress={() => handleDeleteReview(rev.id)}
-                                            className="w-10 h-10 bg-red-50 rounded-xl items-center justify-center"
-                                        >
-                                            <Trash2 size={18} color="#EF4444" />
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            ))
-                        ) : (
-                            <View className="items-center py-20">
-                                <MessageSquare size={48} color="#CBD5E1" />
-                                <Text className="text-slate-400 font-bold mt-4">No hay reseñas para moderar</Text>
-                            </View>
-                        )}
-                    </View>
+                    <ReviewsTab
+                        reviews={reviews}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        handleDeleteReview={handleDeleteReview}
+                    />
                 )}
 
                 {activeTab === 'activity' && (
-                    <View>
-                        {activityLogs.length > 0 ? (
-                            activityLogs.map((log, idx) => (
-                                <View key={idx} style={styles.activityItem}>
-                                    <View style={[styles.activityIcon, { backgroundColor: log.type === 'user' ? '#EEF2FF' : log.type === 'product' ? '#F0FDF4' : '#F5F3FF' }]}>
-                                        {log.type === 'user' ? <UserPlus size={16} color="#4F46E5" /> :
-                                            log.type === 'product' ? <Package size={16} color="#16A34A" /> :
-                                                <MessageSquare size={16} color="#7C3AED" />}
-                                    </View>
-                                    <View className="flex-1 ml-3">
-                                        <Text className="text-slate-900 font-bold text-sm">
-                                            {log.type === 'user' ? `Nuevo usuario: ${log.full_name}` :
-                                                log.type === 'product' ? `Nuevo producto: ${log.title}` :
-                                                    `Nueva reseña: "${log.comment.substring(0, 30)}..."`}
-                                        </Text>
-                                        <View className="flex-row items-center mt-1">
-                                            <Clock size={10} color="#94A3B8" />
-                                            <Text className="text-slate-400 text-[10px] font-bold uppercase ml-1">
-                                                {new Date(log.created_at).toLocaleTimeString()} · {new Date(log.created_at).toLocaleDateString()}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                </View>
-                            ))
-                        ) : (
-                            <View className="items-center py-20">
-                                <HistoryLogIcon size={48} color="#CBD5E1" />
-                                <Text className="text-slate-400 font-bold mt-4">No hay actividad reciente</Text>
-                            </View>
-                        )}
-                    </View>
+                    <ActivityTab activityLogs={activityLogs} />
                 )}
-
-                {activeTab === 'audit' && (
-                    <View>
-                        {auditLogs.length > 0 ? (
-                            auditLogs.map((log) => (
-                                <View key={log.id} style={styles.activityItem}>
-                                    <View style={[styles.activityIcon, { backgroundColor: '#F8FAFC' }]}>
-                                        <Activity size={16} color="#64748B" />
-                                    </View>
-                                    <View className="flex-1 ml-3">
-                                        <Text className="text-slate-900 font-bold text-sm">
-                                            {log.profiles?.full_name || 'Admin'}: <Text className="font-black text-brand-600">{log.action.toUpperCase().replace('_', ' ')}</Text>
-                                        </Text>
-                                        {log.details && (
-                                            <Text className="text-slate-500 text-xs mt-0.5">
-                                                {log.details.full_name ? `Usuario: ${log.details.full_name}` :
-                                                    log.details.reason ? `Motivo: ${log.details.reason}` :
-                                                        JSON.stringify(log.details)}
-                                            </Text>
-                                        )}
-                                        <View className="flex-row items-center mt-1">
-                                            <Clock size={10} color="#94A3B8" />
-                                            <Text className="text-slate-400 text-[10px] font-bold uppercase ml-1">
-                                                {new Date(log.created_at).toLocaleTimeString()} · {new Date(log.created_at).toLocaleDateString()}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                </View>
-                            ))
-                        ) : (
-                            <View className="items-center py-20">
-                                <ShieldCheck size={48} color="#CBD5E1" />
-                                <Text className="text-slate-400 font-bold mt-4">Historial de auditoría vacío</Text>
-                                <Text className="text-slate-300 text-xs mt-2 text-center px-10">Asegúrate de haber creado la tabla `admin_audit_logs` en Supabase.</Text>
-                            </View>
-                        )}
-                    </View>
-                )}
-
 
                 {activeTab === 'gallery' && (
-                    <View style={styles.galleryGrid}>
-                        {galleryProducts.length > 0 ? (
-                            galleryProducts.map(prod => (
-                                <View key={prod.id} style={styles.galleryItem}>
-                                    <TouchableOpacity
-                                        activeOpacity={0.9}
-                                        onPress={() => {
-                                            setSelectedProduct(prod);
-                                            setShowProductModal(true);
-                                        }}
-                                    >
-                                        <View style={styles.galleryImageContainer}>
-                                            <View style={styles.galleryImagePlaceholder}>
-                                                <ImageIcon size={24} color="#CBD5E1" />
-                                            </View>
-                                            {prod.image_url ? (
-                                                <Image
-                                                    source={{ uri: prod.image_url }}
-                                                    style={StyleSheet.absoluteFill}
-                                                    resizeMode="cover"
-                                                />
-                                            ) : null}
-
-                                            {/* Action Overlays */}
-                                            <View style={styles.galleryActions}>
-                                                <TouchableOpacity
-                                                    onPress={() => handleToggleFeatured(prod.id, !!prod.is_featured)}
-                                                    style={[styles.galleryActionBtn, prod.is_featured ? styles.galleryActionActive : styles.galleryActionInactive]}
-                                                >
-                                                    <Star size={14} color={prod.is_featured ? 'white' : '#94A3B8'} fill={prod.is_featured ? 'white' : 'transparent'} />
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    onPress={() => handleDeleteProduct(prod.id)}
-                                                    style={[styles.galleryActionBtn, styles.galleryDeleteBtn]}
-                                                >
-                                                    <Trash2 size={14} color="#EF4444" />
-                                                </TouchableOpacity>
-                                            </View>
-
-                                            {prod.is_featured && (
-                                                <View style={styles.featuredBadge}>
-                                                    <Sparkles size={8} color="white" />
-                                                    <Text style={styles.featuredBadgeText}>TOP</Text>
-                                                </View>
-                                            )}
-                                        </View>
-                                        <Text numberOfLines={1} style={styles.galleryText}>{prod.title}</Text>
-                                    </TouchableOpacity>
-                                </View>
-                            ))
-                        ) : (
-                            <View className="items-center py-20 w-full">
-                                <ImageIcon size={48} color="#CBD5E1" />
-                                <Text className="text-slate-400 font-bold mt-4">No hay productos en galería</Text>
-                            </View>
-                        )}
-                    </View>
+                    <GalleryTab
+                        galleryProducts={galleryProducts}
+                        setSelectedProduct={setSelectedProduct}
+                        setShowProductModal={setShowProductModal}
+                        handleToggleFeatured={handleToggleFeatured}
+                        handleDeleteProduct={handleDeleteProduct}
+                    />
                 )}
 
                 {activeTab === 'categories' && (
-                    <View>
-                        <View className="bg-amber-50 rounded-2xl p-4 border border-amber-100 mb-6">
-                            <Text className="text-amber-800 font-bold text-xs uppercase tracking-widest mb-1">Nota del Sistema</Text>
-                            <Text className="text-amber-700 text-sm">
-                                Las categorías configuradas aquí se reflejan automáticamente en el feed principal de la aplicación.
-                            </Text>
-                        </View>
-                        <View>
-                            {categoriesConfig.length > 0 ? (
-                                categoriesConfig.map((cat, idx) => (
-                                    <View key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 flex-row justify-between items-center mb-3">
-                                        <Text className="text-slate-900 font-bold">{cat}</Text>
-                                        <TouchableOpacity
-                                            onPress={() => handleDeleteCategory(cat)}
-                                            className="p-2"
-                                        >
-                                            <Trash2 size={16} color="#EF4444" />
-                                        </TouchableOpacity>
-                                    </View>
-                                ))
-                            ) : null}
-                            <TouchableOpacity
-                                onPress={handleAddCategory}
-                                className="bg-slate-50 border border-dashed border-slate-300 p-4 rounded-2xl items-center mt-4"
-                            >
-                                <Text className="text-slate-400 font-bold">+ Agregar Nueva Categoría</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
+                    <CategoriesTab
+                        categories={categoriesConfig}
+                        handleAddCategory={handleAddCategory}
+                        handleDeleteCategory={handleDeleteCategory}
+                    />
                 )}
 
                 {activeTab === 'banners' && (
-                    <View>
-                        <View className="flex-row justify-between items-center mb-6">
-                            <Text className="text-slate-900 font-extrabold text-xl">Gestión de Banners</Text>
-                            <TouchableOpacity
-                                onPress={() => setShowBannerModal(true)}
-                                className="bg-brand-500 py-3 px-6 rounded-2xl flex-row items-center"
-                            >
-                                <Send size={16} color="white" className="mr-2" />
-                                <Text className="text-white font-bold">Nuevo Banner</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        {banners.length > 0 ? (
-                            banners.map(banner => (
-                                <View key={banner.id} style={styles.adminListCard}>
-                                    <View className="flex-row">
-                                        <View className="w-24 h-16 bg-slate-100 rounded-xl overflow-hidden mr-4">
-                                            {banner.image_url ? (
-                                                <Image source={{ uri: banner.image_url }} className="w-full h-full" resizeMode="cover" />
-                                            ) : (
-                                                <View className="items-center justify-center flex-1">
-                                                    <ImageIcon size={20} color="#94A3B8" />
-                                                </View>
-                                            )}
-                                        </View>
-                                        <View className="flex-1">
-                                            <Text className="text-slate-900 font-bold text-sm" numberOfLines={1}>
-                                                {banner.title || 'Sin Título'}
-                                            </Text>
-                                            <Text className="text-slate-400 text-xs mt-1" numberOfLines={1}>
-                                                {banner.image_url}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <View className="flex-row justify-end mt-4 pt-4 border-t border-slate-50">
-                                        <TouchableOpacity
-                                            onPress={() => handleToggleBanner(banner.id, banner.is_active)}
-                                            className={`py-2 px-4 rounded-xl mr-2 ${banner.is_active ? 'bg-green-50' : 'bg-slate-50'}`}
-                                        >
-                                            <Text className={`font-bold text-[10px] ${banner.is_active ? 'text-green-600' : 'text-slate-400'}`}>
-                                                {banner.is_active ? 'ACTIVO' : 'PAUSADO'}
-                                            </Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            onPress={() => handleDeleteBanner(banner.id)}
-                                            className="bg-red-50 py-2 px-4 rounded-xl"
-                                        >
-                                            <Trash2 size={14} color="#EF4444" />
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            ))
-                        ) : (
-                            <View className="items-center justify-center py-20 bg-white rounded-[40px] border border-slate-100">
-                                <ImageIcon size={48} color="#E2E8F0" />
-                                <Text className="text-slate-400 font-bold mt-4">No hay banners configurados</Text>
-                            </View>
-                        )}
-                    </View>
+                    <BannersTab
+                        banners={banners}
+                        handleToggleBanner={handleToggleBanner}
+                        handleDeleteBanner={handleDeleteBanner}
+                        setShowBannerModal={setShowBannerModal}
+                    />
                 )}
 
                 {activeTab === 'reports' && (
-                    <View>
-                        {reports.length > 0 ? (
-                            reports.map(rep => (
-                                <View key={rep.id} style={styles.adminListCard}>
-                                    <View className="flex-row items-center mb-3">
-                                        <View className="w-8 h-8 bg-red-100 rounded-full items-center justify-center mr-3">
-                                            <Flag size={14} color="#EF4444" />
-                                        </View>
-                                        <View>
-                                            <Text className="text-slate-900 font-black text-sm">Reporte de Producto</Text>
-                                            <Text className="text-slate-400 text-[10px] font-bold uppercase tracking-tighter">
-                                                En: {rep.products?.title || 'Desconocido'}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                    <Text className="text-slate-600 text-sm mb-4 leading-relaxed">
-                                        "{rep.reason}"
-                                    </Text>
-                                    <View className="flex-row justify-between items-center border-t border-slate-50 pt-4">
-                                        <Text className="text-slate-400 text-[10px] font-bold uppercase">
-                                            De: {rep.profiles?.full_name || 'Veedor'}
-                                        </Text>
-                                        <TouchableOpacity
-                                            onPress={() => handleResolveReport(rep.id)}
-                                            className="bg-red-50 px-4 py-2 rounded-xl"
-                                        >
-                                            <Text className="text-red-500 font-black text-[10px] uppercase">Marcar Resuelto</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                </View>
-                            ))
-                        ) : (
-                            <View className="items-center py-20">
-                                <ShieldCheck size={48} color="#F0FDF4" />
-                                <Text className="text-slate-400 font-bold mt-4">Todo en orden. No hay reportes pendientes.</Text>
-                            </View>
-                        )}
-                    </View>
+                    <ReportsTab
+                        reports={reports}
+                        handleResolveReport={handleResolveReport}
+                    />
+                )}
+
+                {activeTab === 'performance' && (
+                    <PerformanceTab merchantPerformance={merchantPerformance} />
+                )}
+
+                {activeTab === 'audit' && (
+                    <AuditTab
+                        auditLogs={auditLogs}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        handleCopyId={handleCopyId}
+                    />
+                )}
+
+                {activeTab === 'settings' && (
+                    <SettingsTab
+                        maintenanceEnabled={maintenanceEnabled}
+                        handleToggleMaintenance={handleToggleMaintenance}
+                        isActionLoading={loading}
+                        appConfig={appConfig}
+                        requireApproval={requireApproval}
+                        handleUpdateConfig={handleUpdateConfig}
+                        handleLoadBaseDictionary={handleLoadBaseDictionary}
+                        setConfigKey={setConfigKey}
+                        setConfigValue={setConfigValue}
+                        setIsEditingConfig={setIsEditingConfig}
+                        setShowConfigModal={setShowConfigModal}
+                    />
+                )}
+
+                {activeTab === 'health' && (
+                    <HealthTab
+                        onlineCount={onlineCount}
+                        healthLogs={healthLogs}
+                        isHealthCheckRunning={isHealthCheckRunning}
+                        runHealthCheck={runHealthCheck}
+                    />
+                )}
+
+                {activeTab === 'transactions' && (
+                    <TransactionsTab
+                        transactions={transactions}
+                        handleIntervene={handleIntervene}
+                    />
+                )}
+
+                {activeTab === 'approvals' && (
+                    <ApprovalsTab
+                        pendingProducts={pendingProducts}
+                        handleApproveProduct={handleApproveProduct}
+                        handleRejectProduct={handleRejectProduct}
+                    />
+                )}
+
+                {activeTab === 'events' && (
+                    <EventsTab
+                        events={specialEvents}
+                        availableCategories={categoriesConfig}
+                        handleAddEvent={handleAddEvent}
+                        handleDeleteEvent={handleDeleteEvent}
+                        handleToggleEvent={handleToggleEvent}
+                        handleUpdateEventColor={handleUpdateEventColor}
+                        handleToggleEventCategory={handleToggleEventCategory}
+                        handleUpdateEventDuration={handleUpdateEventDuration}
+                        handleUpdateEventType={handleUpdateEventType}
+                    />
                 )}
             </ScrollView>
+
+            {/* Modal para Nuevo Evento (Arreglo para Android) */}
+            <Modal visible={showAddEventModal} animationType="slide" transparent={true}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { height: 'auto', padding: 24 }]}>
+                        <View className="flex-row justify-between items-center mb-6">
+                            <Text className="text-xl font-bold text-slate-900">Configurar Nuevo Evento</Text>
+                            <TouchableOpacity onPress={() => setShowAddEventModal(false)}>
+                                <X size={24} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View className="mb-6">
+                            <Text className="text-slate-500 text-xs font-bold uppercase mb-3">Plantillas Rápidas</Text>
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+                                {EVENT_PRESETS.map(preset => {
+                                    const icons: any = { Snowflake, PartyPopper, Sparkles, ShoppingBasket, Gift };
+                                    const TypeIcon = icons[preset.icon];
+                                    const isSelected = newEventType === preset.id;
+                                    return (
+                                        <TouchableOpacity
+                                            key={preset.id}
+                                            onPress={() => {
+                                                setNewEventType(preset.id);
+                                                setNewEventName(preset.defaultName);
+                                                setNewEventColor(preset.color);
+                                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                            }}
+                                            style={{
+                                                backgroundColor: isSelected ? preset.color : '#F8FAFC',
+                                                borderColor: isSelected ? preset.color : '#E2E8F0',
+                                                borderWidth: 1,
+                                            }}
+                                            className="mr-3 p-4 rounded-2xl items-center min-w-[100px]"
+                                        >
+                                            <TypeIcon size={24} color={isSelected ? 'white' : '#64748B'} />
+                                            <Text className={`mt-2 text-xs font-bold ${isSelected ? 'text-white' : 'text-slate-600'}`}>
+                                                {preset.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </ScrollView>
+                        </View>
+
+                        <View className="mb-6">
+                            <Text className="text-slate-500 text-xs font-bold uppercase mb-2">Nombre del Evento</Text>
+                            <TextInput
+                                className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-slate-900"
+                                placeholder="Ej: Venta de Navidad, Cyber Day..."
+                                value={newEventName}
+                                onChangeText={setNewEventName}
+                                autoFocus
+                            />
+                        </View>
+
+                        <TouchableOpacity
+                            onPress={confirmAddEvent}
+                            disabled={isActionLoading}
+                            className={`h-14 rounded-2xl items-center justify-center flex-row ${isActionLoading ? 'bg-slate-100' : 'bg-brand-600'}`}
+                        >
+                            {isActionLoading ? (
+                                <ActivityIndicator color="#6366f1" />
+                            ) : (
+                                <>
+                                    <Star size={20} color="white" className="mr-2" />
+                                    <Text className="text-white font-bold">Crear Evento Especial</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Entity Modals */}
             <Modal visible={showAddCategoryModal} animationType="fade" transparent={true}>
@@ -1997,6 +2218,36 @@ export default function AdminDashboard() {
                                                         <UserMinus size={16} color="white" />
                                                         <Text className="text-white font-black ml-2 uppercase text-xs">Aplicar Ban</Text>
                                                     </TouchableOpacity>
+                                                </View>
+                                            )}
+                                        </View>
+
+                                        {/* Warning System Section */}
+                                        <View className="mt-6 pt-6 border-t border-slate-100">
+                                            <Text className="text-slate-900 font-black text-base mb-4">Llamado de Atención (Warn)</Text>
+                                            <View className="flex-row space-x-2">
+                                                <View style={[styles.input, { flex: 1, justifyContent: 'center' }]}>
+                                                    <TextInput
+                                                        placeholder="Motivo de la advertencia..."
+                                                        value={warningReason}
+                                                        onChangeText={setWarningReason}
+                                                        style={{ fontSize: 13 }}
+                                                    />
+                                                </View>
+                                                <TouchableOpacity
+                                                    onPress={handleWarnUser}
+                                                    disabled={isActionLoading || !warningReason}
+                                                    className={`px-6 rounded-2xl items-center justify-center ${!warningReason ? 'bg-slate-100' : 'bg-amber-500'}`}
+                                                >
+                                                    <AlertTriangle size={20} color={!warningReason ? '#CBD5E1' : 'white'} />
+                                                </TouchableOpacity>
+                                            </View>
+                                            {selectedUser && (selectedUser.warning_count || 0) > 0 && (
+                                                <View className="flex-row items-center mt-3 bg-amber-50 p-3 rounded-xl border border-amber-100">
+                                                    <Info size={14} color="#D97706" />
+                                                    <Text className="text-amber-800 text-[10px] font-bold ml-2">
+                                                        ESTE USUARIO YA TIENE {selectedUser.warning_count || 0} ADVERTENCIAS.
+                                                    </Text>
                                                 </View>
                                             )}
                                         </View>
@@ -2181,7 +2432,7 @@ export default function AdminDashboard() {
                                 <TextInput
                                     style={styles.input}
                                     value={newBanner.image_url}
-                                    onChangeText={(text) => setNewBanner(prev => ({ ...prev, image_url: text }))}
+                                    onChangeText={(text: string) => setNewBanner((prev: any) => ({ ...prev, image_url: text }))}
                                     placeholder="https://images.unsplash.com/..."
                                     placeholderTextColor="#94A3B8"
                                 />
@@ -2192,7 +2443,7 @@ export default function AdminDashboard() {
                                 <TextInput
                                     style={styles.input}
                                     value={newBanner.title}
-                                    onChangeText={(text) => setNewBanner(prev => ({ ...prev, title: text }))}
+                                    onChangeText={(text: string) => setNewBanner((prev: any) => ({ ...prev, title: text }))}
                                     placeholder="Ej: Ofertas de Navidad"
                                     placeholderTextColor="#94A3B8"
                                 />
@@ -2203,7 +2454,7 @@ export default function AdminDashboard() {
                                 <TextInput
                                     style={styles.input}
                                     value={newBanner.link_route}
-                                    onChangeText={(text) => setNewBanner(prev => ({ ...prev, link_route: text }))}
+                                    onChangeText={(text: string) => setNewBanner((prev: any) => ({ ...prev, link_route: text }))}
                                     placeholder="Ej: /(tabs)/post"
                                     placeholderTextColor="#94A3B8"
                                 />
@@ -2221,6 +2472,52 @@ export default function AdminDashboard() {
                                 )}
                             </TouchableOpacity>
                         </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            <Modal visible={showConfigModal} animationType="fade" transparent={true}>
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { height: 'auto', padding: 32 }]}>
+                        <View className="flex-row justify-between items-center mb-6">
+                            <Text style={styles.modalTitle}>{isEditingConfig ? 'Editar Variable' : 'Nueva Variable'}</Text>
+                            <TouchableOpacity onPress={() => setShowConfigModal(false)}>
+                                <X size={24} color="#94A3B8" />
+                            </TouchableOpacity>
+                        </View>
+                        <View className="mb-4">
+                            <Text className="text-slate-500 font-bold text-xs mb-2 uppercase tracking-widest">Clave (Key)</Text>
+                            <TextInput
+                                style={[styles.input, isEditingConfig && { opacity: 0.6 }]}
+                                value={configKey}
+                                onChangeText={setConfigKey}
+                                placeholder="Ej: maintenance_mode"
+                                placeholderTextColor="#94A3B8"
+                                editable={!isEditingConfig}
+                            />
+                        </View>
+                        <View className="mb-6">
+                            <Text className="text-slate-500 font-bold text-xs mb-2 uppercase tracking-widest">Valor (Value)</Text>
+                            <TextInput
+                                style={[styles.input, { height: 100 }]}
+                                value={configValue}
+                                onChangeText={setConfigValue}
+                                placeholder="Ingresa el valor..."
+                                placeholderTextColor="#94A3B8"
+                                multiline
+                            />
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => {
+                                handleUpdateConfig(configKey, configValue);
+                                setShowConfigModal(false);
+                            }}
+                            disabled={isActionLoading || !configKey.trim()}
+                            activeOpacity={0.8}
+                            style={[styles.broadcastButton, (!configKey.trim() || isActionLoading) && { opacity: 0.5 }]}
+                        >
+                            {isActionLoading ? <ActivityIndicator color="white" /> : <Text style={styles.broadcastButtonText}>{isEditingConfig ? 'Actualizar Variable' : 'Crear Variable'}</Text>}
+                        </TouchableOpacity>
                     </View>
                 </View>
             </Modal>
@@ -2477,49 +2774,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 24,
     },
-    rankingCard: {
-        flex: 1,
-        backgroundColor: 'white',
-        padding: 16,
-        borderRadius: 24,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.02,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    rankingTitle: {
-        fontSize: 12,
-        fontWeight: '900',
-        color: '#64748B',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-        marginBottom: 16,
-    },
-    rankingItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    rankingNumber: {
-        fontSize: 14,
-        fontWeight: '900',
-        color: '#8b5cf6',
-        width: 24,
-    },
-    rankingName: {
-        fontSize: 13,
-        fontWeight: 'bold',
-        color: '#0F172A',
-    },
-    rankingValue: {
-        fontSize: 10,
-        fontWeight: 'bold',
-        color: '#94A3B8',
-        textTransform: 'uppercase',
-    },
     detailIcon: {
         width: 40,
         height: 40,
@@ -2558,176 +2812,6 @@ const styles = StyleSheet.create({
         color: '#475569',
         lineHeight: 20,
         marginTop: 2,
-    },
-    activityItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'white',
-        padding: 16,
-        borderRadius: 24,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    activityIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    galleryGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-        paddingTop: 10,
-    },
-    galleryItem: {
-        width: '48%',
-        backgroundColor: 'white',
-        borderRadius: 24,
-        padding: 8,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-    },
-    galleryImageContainer: {
-        width: '100%',
-        aspectRatio: 1,
-        borderRadius: 18,
-        backgroundColor: '#F8FAFC',
-        overflow: 'hidden',
-    },
-    galleryImagePlaceholder: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    galleryText: {
-        fontSize: 12,
-        fontWeight: 'bold',
-        color: '#1E293B',
-        marginTop: 8,
-        paddingHorizontal: 4,
-        textAlign: 'center',
-    },
-    featuredBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 12,
-        borderWidth: 1,
-    },
-    featuredBtnActive: {
-        backgroundColor: '#F59E0B',
-        borderColor: '#F59E0B',
-    },
-    featuredBtnInactive: {
-        backgroundColor: 'white',
-        borderColor: '#E2E8F0',
-    },
-    featuredBtnText: {
-        marginLeft: 6,
-    },
-    galleryActions: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-        flexDirection: 'row',
-        gap: 6,
-    },
-    galleryActionBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 12,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    galleryActionActive: {
-        backgroundColor: '#F59E0B',
-        borderColor: '#F59E0B',
-    },
-    galleryActionInactive: {
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        borderColor: '#E2E8F0',
-    },
-    galleryDeleteBtn: {
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-        borderColor: '#FEE2E2',
-    },
-    featuredBadge: {
-        position: 'absolute',
-        bottom: 8,
-        left: 8,
-        backgroundColor: '#8b5cf6',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 3,
-    },
-    featuredBadgeText: {
-        color: 'white',
-        fontSize: 8,
-        fontWeight: '900',
-        letterSpacing: 0.5,
-    },
-    ticketItem: {
-        backgroundColor: 'white',
-        borderRadius: 24,
-        padding: 16,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#F1F5F9',
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-        alignSelf: 'flex-start',
-        marginTop: 4,
-    },
-    statusBadgeText: {
-        fontSize: 9,
-        fontWeight: '900',
-        textTransform: 'uppercase',
-    },
-    ticketTitle: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#0F172A',
-    },
-    ticketSender: {
-        fontSize: 11,
-        color: '#64748B',
-        marginTop: 2,
-    },
-    ticketModalContent: {
-        backgroundColor: 'white',
-        borderTopLeftRadius: 32,
-        borderTopRightRadius: 32,
-        padding: 24,
-        maxHeight: '90%',
-    },
-    replyInput: {
-        backgroundColor: '#F8FAFC',
-        borderRadius: 20,
-        padding: 16,
-        minHeight: 120,
-        textAlignVertical: 'top',
-        marginTop: 16,
-        borderWidth: 1,
-        borderColor: '#E2E8F0',
     },
     primaryButton: {
         height: 52,

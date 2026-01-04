@@ -2,6 +2,7 @@ import { Stack, useRouter } from 'expo-router';
 import { ArrowRight, Lock, Mail, Store, User } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { getDeviceId } from '../../lib/device_id';
 import { supabase } from '../../lib/supabase';
 
 export default function LoginScreen() {
@@ -24,7 +25,26 @@ export default function LoginScreen() {
             password: password.trim(),
         });
 
-        if (error) Alert.alert('Error de acceso', error.message);
+        if (error) {
+            Alert.alert('Error de acceso', error.message);
+            setLoading(false);
+            return;
+        }
+
+        // --- Registro de Auditoría de Dispositivo ---
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const deviceId = await getDeviceId();
+                await supabase
+                    .from('profiles')
+                    .update({ last_device_id: deviceId })
+                    .eq('id', user.id);
+            }
+        } catch (deviceError) {
+            console.error('[Login] Error registrando dispositivo:', deviceError);
+        }
+
         setLoading(false);
     }
 
@@ -57,6 +77,14 @@ export default function LoginScreen() {
 
             if (!data.session) {
                 Alert.alert('Verifica tu correo', 'Te hemos enviado un enlace de confirmación. Por favor revísalo para activar tu cuenta.');
+            } else if (data.user) {
+                // Si el registro fue automático (sin verificación de email pendiente)
+                // registramos el dispositivo de inmediato
+                const deviceId = await getDeviceId();
+                await supabase
+                    .from('profiles')
+                    .update({ last_device_id: deviceId })
+                    .eq('id', data.user.id);
             }
         } catch (err: any) {
             console.error('[SignUp Error Detail]', err);

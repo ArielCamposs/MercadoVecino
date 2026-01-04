@@ -15,13 +15,21 @@ export type AdminAction =
     | 'toggle_featured'
     | 'delete_banner'
     | 'create_banner'
-    | 'resolve_ticket'
-    | 'reply_ticket';
+    | 'reply_ticket'
+    | 'warn_user'
+    | 'update_config'
+    | 'approve_product'
+    | 'reject_product'
+    | 'intervene_transaction'
+    | 'create_event'
+    | 'delete_event'
+    | 'activate_event'
+    | 'deactivate_event';
 
 export const logAdminAction = async (
     action: AdminAction,
     targetId?: string,
-    targetType?: 'user' | 'product' | 'banner' | 'category' | 'report' | 'system' | 'support',
+    targetType?: 'user' | 'product' | 'banner' | 'category' | 'report' | 'system' | 'support' | 'event',
     details?: any
 ) => {
     try {

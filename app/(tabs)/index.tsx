@@ -1,6 +1,6 @@
 import ProactiveReviewModal from '@/components/ProactiveReviewModal';
 import ProductCard, { Product } from '@/components/ProductCard';
-import ReviewSection from '@/components/ReviewSection';
+import ProductDetailModal from '@/components/ProductDetailModal';
 import SkeletonProductCard from '@/components/SkeletonProductCard';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -11,16 +11,16 @@ import {
   ChevronRight,
   Clock,
   Flag,
-  Heart,
+  Gift,
   LayoutGrid,
-  MapPin,
   Megaphone,
-  MessageCircle,
+  PartyPopper,
   Search,
   SearchX,
   ShoppingBasket,
   SlidersHorizontal,
   Smartphone,
+  Snowflake,
   Sparkles,
   Star,
   User,
@@ -74,6 +74,94 @@ const DEFAULT_IMAGES: Record<string, string> = {
   'otros': 'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?q=80&w=500&auto=format&fit=crop',
 };
 
+const FestiveAtmosphere = ({ event, themeColor }: { event: any, themeColor: string }) => {
+  if (!event) return null;
+  const isChristmas = event.name.toLowerCase().includes('navidad') || event.name.toLowerCase().includes('nochebuena');
+  const isSummer = event.name.toLowerCase().includes('verano') || event.name.toLowerCase().includes('vacaciones');
+  const isCyber = event.name.toLowerCase().includes('cyber') || themeColor === '#8b5cf6';
+
+  const DecorationIcon = isChristmas ? Snowflake : (isSummer ? Sparkles : (isCyber ? PartyPopper : Gift));
+
+  return (
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 200, overflow: 'hidden' }} pointerEvents="none">
+      <Animated.View entering={FadeInDown.delay(100).springify()} style={{ position: 'absolute', top: 20, right: -10, opacity: 0.1 }}>
+        <DecorationIcon size={120} color={themeColor} />
+      </Animated.View>
+      <Animated.View entering={FadeInDown.delay(300).springify()} style={{ position: 'absolute', top: 120, left: -20, opacity: 0.05 }}>
+        <DecorationIcon size={80} color={themeColor} />
+      </Animated.View>
+      {isChristmas && (
+        <View className="absolute top-0 left-0 right-0 flex-row justify-around opacity-20">
+          <Snowflake size={12} color={themeColor} />
+          <Snowflake size={16} color={themeColor} />
+          <Snowflake size={14} color={themeColor} />
+          <Snowflake size={18} color={themeColor} />
+        </View>
+      )}
+    </View>
+  );
+};
+
+const EventCountdown = ({ endDate, themeColor }: { endDate: string, themeColor: string }) => {
+  const [timeLeft, setTimeLeft] = useState<{ d: number, h: number, m: number, s: number } | null>(null);
+
+  useEffect(() => {
+    const calculateTime = () => {
+      const difference = +new Date(endDate) - +new Date();
+      if (difference > 0) {
+        setTimeLeft({
+          d: Math.floor(difference / (1000 * 60 * 60 * 24)),
+          h: Math.floor((difference / (1000 * 60 * 60)) % 24),
+          m: Math.floor((difference / 1000 / 60) % 60),
+          s: Math.floor((difference / 1000) % 60),
+        });
+      } else {
+        setTimeLeft(null);
+      }
+    };
+
+    calculateTime();
+    const timer = setInterval(calculateTime, 1000);
+    return () => clearInterval(timer);
+  }, [endDate]);
+
+  if (!timeLeft) return null;
+
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(200).springify()}
+      className="mx-6 mt-4 p-4 rounded-[32px] border flex-row items-center justify-between shadow-sm"
+      style={{ backgroundColor: `${themeColor}15`, borderColor: `${themeColor}30` }}
+    >
+      <View className="flex-row items-center">
+        <View style={{ backgroundColor: themeColor }} className="w-8 h-8 rounded-full items-center justify-center mr-3">
+          <Clock size={16} color="white" />
+        </View>
+        <Text style={{ color: themeColor }} className="font-black text-[10px] uppercase tracking-widest">Termina en:</Text>
+      </View>
+
+      <View className="flex-row items-center gap-2">
+        {[
+          { label: 'd', val: timeLeft.d },
+          { label: 'h', val: timeLeft.h },
+          { label: 'm', val: timeLeft.m },
+          { label: 's', val: timeLeft.s }
+        ].map((unit, i) => (
+          <View key={unit.label} className="flex-row items-center">
+            <View className="items-center">
+              <Text style={{ color: themeColor }} className="font-black text-sm">
+                {String(unit.val).padStart(2, '0')}
+              </Text>
+              <Text style={{ color: themeColor, opacity: 0.5 }} className="text-[7px] font-bold uppercase">{unit.label}</Text>
+            </View>
+            {i < 3 && <Text style={{ color: themeColor, opacity: 0.3 }} className="mx-1 font-black text-sm">:</Text>}
+          </View>
+        ))}
+      </View>
+    </Animated.View>
+  );
+};
+
 export default function TabOneScreen() {
   const router = useRouter();
   const [products, setProducts] = useState<Product[]>([]);
@@ -98,6 +186,7 @@ export default function TabOneScreen() {
   const [personalAlert, setPersonalAlert] = useState<any | null>(null);
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [banners, setBanners] = useState<any[]>([]);
+  const [currentEvent, setCurrentEvent] = useState<any | null>(null);
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
   const slideAnim = React.useRef(new RNAnimated.Value(-1000)).current;
   const bannerScrollRef = React.useRef<ScrollView>(null);
@@ -122,11 +211,23 @@ export default function TabOneScreen() {
 
   const fetchProducts = async () => {
     try {
-      // 1. Fetch products simply (to avoid join errors)
-      const { data: rawProducts, error: productsError } = await supabase
+      // 1. Fetch products simply (attempting to filter by status if it exists)
+      let { data: rawProducts, error: productsError } = await supabase
         .from('products')
         .select('*')
+        .eq('status', 'approved')
         .order('created_at', { ascending: false });
+
+      // Fallback: If status column doesn't exist (Error 42703), fetch all products
+      if (productsError && productsError.code === '42703') {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('products')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        rawProducts = fallbackData;
+        productsError = fallbackError;
+      }
 
       if (productsError) throw productsError;
 
@@ -199,6 +300,9 @@ export default function TabOneScreen() {
           user_id: p.user_id,
           is_featured: !!p.is_featured,
           image_urls: p.image_urls || [imageUrl],
+          allows_pickup: p.allows_pickup ?? true,
+          allows_delivery: p.allows_delivery ?? false,
+          delivery_fee: p.delivery_fee || 0,
         };
       });
 
@@ -218,6 +322,26 @@ export default function TabOneScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const fetchActiveEvent = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('special_events')
+        .select('*')
+        .eq('is_active', true)
+        .lte('start_date', new Date().toISOString())
+        .gte('end_date', new Date().toISOString())
+        .single();
+
+      if (!error && data) {
+        setCurrentEvent(data);
+      } else {
+        setCurrentEvent(null);
+      }
+    } catch (err) {
+      console.log('[Eventos] Error:', err);
     }
   };
 
@@ -368,6 +492,7 @@ export default function TabOneScreen() {
     fetchAnnouncements();
     fetchCategories();
     fetchBanners();
+    fetchActiveEvent();
 
     // Realtime subscription for announcements and banners
     const channel = supabase
@@ -377,6 +502,9 @@ export default function TabOneScreen() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promotional_banners' }, () => {
         fetchBanners();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'special_events' }, () => {
+        fetchActiveEvent();
       })
       .subscribe();
 
@@ -405,6 +533,7 @@ export default function TabOneScreen() {
     fetchAnnouncements();
     fetchCategories();
     fetchBanners();
+    fetchActiveEvent();
   }, []);
 
   // Sync notifications when screen gains focus
@@ -573,34 +702,40 @@ export default function TabOneScreen() {
         .from('chat_rooms')
         .select('id')
         .contains('participants', [user.id, product.user_id])
-        .single();
+        .eq('product_id', product.id)
+        .maybeSingle();
 
-      if (existingRoom) {
-        setSelectedProduct(null);
-        router.push({
-          pathname: '/chat/[id]',
-          params: { id: existingRoom.id }
-        });
-        return;
+      let roomId = existingRoom?.id;
+
+      if (!roomId) {
+        // 2. Create room
+        const { data: newRoom, error: createError } = await supabase
+          .from('chat_rooms')
+          .insert({
+            product_id: product.id,
+            participants: [user.id, product.user_id]
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        roomId = newRoom?.id;
       }
 
-      // 2. Create room
-      const { data: newRoom, error: createError } = await supabase
-        .from('chat_rooms')
-        .insert({
-          product_id: product.id,
-          participants: [user.id, product.user_id]
-        })
-        .select()
-        .single();
+      if (roomId) {
+        // 3. Send context message (every time user contacts for this product)
+        await supabase
+          .from('chat_messages')
+          .insert({
+            room_id: roomId,
+            sender_id: user.id,
+            content: `¡Hola! Me interesa tu producto: ${product.title}. ¿Está disponible?`
+          });
 
-      if (createError) throw createError;
-
-      if (newRoom) {
         setSelectedProduct(null);
         router.push({
           pathname: '/chat/[id]',
-          params: { id: newRoom.id }
+          params: { id: roomId }
         });
       }
     } catch (err) {
@@ -632,6 +767,9 @@ export default function TabOneScreen() {
   });
 
   const insets = useSafeAreaInsets();
+  const themeColor = currentEvent?.theme_color || '#8b5cf6';
+  const themeColorLight = currentEvent ? `${currentEvent.theme_color}20` : '#f5f3ff'; // 12% opacity roughly
+  const themeColorVeryLight = currentEvent ? `${currentEvent.theme_color}10` : '#f5f3ff';
 
   return (
     <SafeAreaView edges={['top']} style={styles.container}>
@@ -641,9 +779,13 @@ export default function TabOneScreen() {
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled={true}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2563EB" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={themeColor} />
         }
       >
+        <FestiveAtmosphere event={currentEvent} themeColor={themeColor} />
+        {currentEvent && (
+          <EventCountdown endDate={currentEvent.end_date} themeColor={themeColor} />
+        )}
         {/* Promotional Banners Carousel */}
         {banners.length > 0 && (
           <Animated.View
@@ -690,6 +832,7 @@ export default function TabOneScreen() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
+
               {/* Pagination Dots */}
               <View className="absolute bottom-4 left-0 right-0 flex-row justify-center space-x-1.5">
                 {banners.map((_, i) => (
@@ -713,7 +856,8 @@ export default function TabOneScreen() {
                   key={ann.id}
                   entering={FadeInDown.delay(400 + index * 100).springify()}
                   layout={Layout.springify()}
-                  className={`${isAlert ? 'bg-red-600 border-red-400 shadow-red-200' : 'bg-brand-600 border-brand-400 shadow-brand-200'} p-5 rounded-[32px] flex-row items-center border shadow-xl mb-3`}
+                  className={`${isAlert ? 'bg-red-600 border-red-400 shadow-red-200' : ''} p-5 rounded-[32px] flex-row items-center border shadow-xl mb-3`}
+                  style={!isAlert ? { backgroundColor: themeColor, borderColor: themeColor, shadowColor: themeColor } : {}}
                 >
                   <View className={`w-12 h-12 ${isAlert ? 'bg-white/30' : 'bg-white/20'} rounded-2xl items-center justify-center mr-4`}>
                     {isAlert ? <AlertCircle size={22} color="white" /> : <Megaphone size={22} color="white" />}
@@ -743,7 +887,9 @@ export default function TabOneScreen() {
                 />
               </View>
               <View>
-                <Text style={styles.headerLabel}>DESCUBRE LA LIGUA</Text>
+                <Text style={[styles.headerLabel, { color: themeColor }]}>
+                  {currentEvent ? currentEvent.name.toUpperCase() : 'DESCUBRE LA LIGUA'}
+                </Text>
                 <Text style={styles.headerTitle}>MercadoVecino</Text>
               </View>
             </View>
@@ -757,9 +903,9 @@ export default function TabOneScreen() {
                 }
               }}
               activeOpacity={0.7}
-              style={styles.iconButton}
+              style={[styles.iconButton, { shadowColor: themeColor }]}
             >
-              <Bell size={22} color="#4c1d95" />
+              <Bell size={22} color={themeColor} />
               {pendingSalesCount > 0 && (
                 <View style={{
                   position: 'absolute',
@@ -782,8 +928,8 @@ export default function TabOneScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.searchBar}>
-            <Search size={20} color="#8b5cf6" />
+          <View style={[styles.searchBar, { shadowColor: themeColor }]}>
+            <Search size={20} color={themeColor} />
             <TextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -843,6 +989,7 @@ export default function TabOneScreen() {
               </View>
             </View>
           )}
+
         </View>
 
         {/* Featured Products Carousel */}
@@ -851,7 +998,7 @@ export default function TabOneScreen() {
             <View className="flex-row items-center justify-between px-6 mb-4">
               <View>
                 <Text className="text-slate-900 font-extrabold text-xl">Recomendados</Text>
-                <Text className="text-brand-500 font-bold text-[10px] uppercase tracking-widest">Selección del Admin</Text>
+                <Text style={{ color: themeColor }} className="font-bold text-[10px] uppercase tracking-widest">Selección del Admin</Text>
               </View>
               <View className="bg-amber-100 px-3 py-1 rounded-full flex-row items-center border border-amber-200">
                 <Star size={10} color="#D97706" fill="#D97706" />
@@ -868,7 +1015,7 @@ export default function TabOneScreen() {
                   key={p.id}
                   activeOpacity={0.9}
                   onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setSelectedProduct(p); }}
-                  style={styles.featuredCard}
+                  style={[styles.featuredCard, { shadowColor: themeColor }]}
                 >
                   <Image source={{ uri: p.image }} style={styles.featuredCardImage} />
                   <View style={styles.featuredBadge}>
@@ -877,20 +1024,20 @@ export default function TabOneScreen() {
                   <View className="p-4">
                     <Text className="text-slate-900 font-black text-sm mb-1" numberOfLines={1}>{p.title}</Text>
                     <View className="flex-row items-center justify-between mb-1">
-                      <Text className="text-brand-600 font-black text-xs">${String(p.price).toLocaleString()}</Text>
+                      <Text style={{ color: themeColor }} className="font-black text-xs">${String(p.price).toLocaleString()}</Text>
                       <View className="flex-row items-center bg-slate-50 px-1.5 py-0.5 rounded-lg border border-slate-100">
                         <Star size={10} fill="#FACC15" color="#FACC15" />
                         <Text className="text-slate-700 font-black text-[9px] ml-1">{(p.rating || 0).toFixed(1)}</Text>
                       </View>
                     </View>
                     <View className="flex-row items-center mt-3 pt-3 border-t border-slate-50">
-                      <View className="w-5 h-5 bg-brand-50 rounded-lg items-center justify-center mr-2">
-                        <User size={10} color="#8b5cf6" />
+                      <View style={{ backgroundColor: themeColorLight }} className="w-5 h-5 rounded-lg items-center justify-center mr-2">
+                        <User size={10} color={themeColor} />
                       </View>
                       <View className="flex-1 flex-row items-center">
                         <Text className="text-slate-500 font-bold text-[10px] mr-1" numberOfLines={1}>{p.seller}</Text>
                         {p.is_verified && (
-                          <BadgeCheck size={12} color="#8b5cf6" fill="#f5f3ff" />
+                          <BadgeCheck size={12} color={themeColor} fill={themeColorVeryLight} />
                         )}
                       </View>
                     </View>
@@ -919,14 +1066,15 @@ export default function TabOneScreen() {
                   activeOpacity={0.8}
                   style={[
                     styles.categoryCard,
-                    isActive && styles.categoryCardActive
+                    isActive && { backgroundColor: themeColor, borderColor: themeColor, shadowColor: themeColor }
                   ]}
                 >
                   <View style={[
                     styles.categoryIconCircle,
-                    isActive && styles.categoryIconCircleActive
+                    isActive && styles.categoryIconCircleActive,
+                    { backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : themeColorLight }
                   ]}>
-                    <Icon size={20} color={isActive ? 'white' : '#8b5cf6'} />
+                    <Icon size={20} color={isActive ? 'white' : themeColor} />
                   </View>
                   <Text style={[
                     styles.categoryName,
@@ -946,8 +1094,8 @@ export default function TabOneScreen() {
             <Text style={styles.sectionTitle}>
               {activeCategory === 'all' ? 'Novedades' : currentCategoryObj?.name}
             </Text>
-            <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
-              <Text style={styles.refreshButtonText}>Actualizar</Text>
+            <TouchableOpacity onPress={onRefresh} style={[styles.refreshButton, { backgroundColor: themeColorLight }]}>
+              <Text style={[styles.refreshButtonText, { color: themeColor }]}>Actualizar</Text>
             </TouchableOpacity>
           </View>
 
@@ -964,6 +1112,8 @@ export default function TabOneScreen() {
                   index={idx}
                   userRole={userRole}
                   onPress={handleProductPress}
+                  themeColor={themeColor}
+                  eventBadge={currentEvent && (currentEvent.highlighted_categories || []).includes(product.category) ? currentEvent.name : null}
                 />
               ))
             ) : searchQuery ? (
@@ -977,7 +1127,7 @@ export default function TabOneScreen() {
                 </Text>
                 <TouchableOpacity
                   onPress={() => setSearchQuery('')}
-                  style={[styles.emptyButton, { backgroundColor: '#64748B' }]}
+                  style={[styles.emptyButton, { backgroundColor: themeColor, shadowColor: themeColor }]}
                 >
                   <Text style={styles.emptyButtonText}>Limpiar Búsqueda</Text>
                 </TouchableOpacity>
@@ -1002,7 +1152,7 @@ export default function TabOneScreen() {
                 {userRole?.toLowerCase().trim() === 'vendor' && (
                   <TouchableOpacity
                     onPress={() => router.push('/post')}
-                    style={styles.emptyButton}
+                    style={[styles.emptyButton, { backgroundColor: themeColor, shadowColor: themeColor }]}
                   >
                     <Text style={styles.emptyButtonText}>Publicar Algo</Text>
                   </TouchableOpacity>
@@ -1013,222 +1163,13 @@ export default function TabOneScreen() {
         </View>
       </ScrollView>
 
-      {/* Detail Modal */}
-      <Modal
+      <ProductDetailModal
         visible={!!selectedProduct}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setSelectedProduct(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {selectedProduct && (
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <View className="relative">
-                  {/* Carousel de Imágenes */}
-                  {selectedProduct.image_urls && selectedProduct.image_urls.length > 1 ? (
-                    <View>
-                      <ScrollView
-                        horizontal
-                        pagingEnabled
-                        showsHorizontalScrollIndicator={false}
-                        style={{ width: width - 32, height: width - 32 }} // Using screen width minus padding
-                      >
-                        {selectedProduct.image_urls.map((url: string, index: number) => (
-                          <Image
-                            key={index}
-                            source={{ uri: url }}
-                            style={{ width: width - 32, height: width - 32 }}
-                            className="rounded-[40px]"
-                            resizeMode="cover"
-                          />
-                        ))}
-                      </ScrollView>
-
-                      {/* Indicadores de puntos */}
-                      <View className="absolute bottom-6 w-full flex-row justify-center space-x-2">
-                        {selectedProduct.image_urls.map((_: any, index: number) => (
-                          <View
-                            key={index}
-                            style={{
-                              width: 8,
-                              height: 8,
-                              borderRadius: 4,
-                              backgroundColor: 'white',
-                              opacity: 0.8,
-                              shadowColor: '#000',
-                              shadowOffset: { width: 0, height: 2 },
-                              shadowOpacity: 0.2,
-                              shadowRadius: 4,
-                            }}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  ) : (
-                    <Image
-                      source={{ uri: selectedProduct.image }}
-                      className="w-full aspect-square rounded-[40px]"
-                      resizeMode="cover"
-                    />
-                  )}
-
-                  <TouchableOpacity
-                    onPress={() => setSelectedProduct(null)}
-                    style={styles.modalCloseBtn}
-                  >
-                    <X size={24} color="#0F172A" />
-                  </TouchableOpacity>
-
-                  <View style={styles.ratingBadge}>
-                    <Star size={14} fill="#FACC15" color="#FACC15" />
-                    <Text className="text-slate-800 font-black ml-2 text-sm">{selectedProduct.rating.toFixed(1)}</Text>
-                    <Text className="text-slate-400 font-bold ml-1 text-xs">({selectedProduct.review_count || 0})</Text>
-                  </View>
-
-                  {(userRole === 'client' || !userRole) && (
-                    <TouchableOpacity
-                      style={[styles.modalCloseBtn, { right: 84 }]}
-                      onPress={() => {
-                        // This logic is abstracted in ProductCard, adding it here for convenience
-                        // For now, we'll just show the heart, but full toggle logic would 
-                        // require moving toggleFavorite to a shared hook/util.
-                      }}
-                    >
-                      <Heart size={24} color="#FF0000" fill="#FF0000" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <View className="p-8">
-                  <View className="flex-row justify-between items-start mb-4">
-                    <View className="flex-1">
-                      <Text className="text-blue-600 font-black text-xs uppercase tracking-widest mb-1">
-                        {selectedProduct.category}
-                      </Text>
-                      <Text className="text-slate-900 font-black text-3xl leading-tight">
-                        {selectedProduct.title}
-                      </Text>
-                    </View>
-                    <View className="bg-blue-50 px-4 py-3 rounded-2xl">
-                      <Text className="text-blue-600 font-black text-xl">
-                        ${(Number(selectedProduct.price) || 0).toLocaleString()}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {selectedProduct.location && (
-                    <View className="flex-row items-center mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                      <MapPin size={18} color="#2563EB" />
-                      <Text className="text-slate-600 font-bold ml-3 text-sm">
-                        {selectedProduct.location}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View className="mb-8">
-                    <Text className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-2 px-1">Descripción</Text>
-                    <Text className="text-slate-600 text-lg leading-6 font-medium">
-                      {selectedProduct.description || 'Sin descripción detallada.'}
-                    </Text>
-                  </View>
-
-                  {selectedProduct.extra_services && selectedProduct.extra_services.length > 0 && (
-                    <View className="mb-8">
-                      <Text className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-3 px-1">Servicios y Precios</Text>
-                      <View className="bg-slate-50 rounded-[32px] p-4 border border-slate-100">
-                        {selectedProduct.extra_services.map((service, idx) => (
-                          <View key={idx} className={`flex-row justify-between items-center py-4 ${idx !== selectedProduct.extra_services!.length - 1 ? 'border-b border-slate-200/50' : ''}`}>
-                            <Text className="text-slate-800 font-bold text-base">{service.name}</Text>
-                            <View className="bg-white px-3 py-1.5 rounded-xl border border-slate-200">
-                              <Text className="text-blue-600 font-black text-sm">${Number(service.price).toLocaleString()}</Text>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-
-                  <ReviewSection
-                    productId={selectedProduct.id}
-                    onReviewSubmitted={() => fetchProducts()}
-                  />
-
-                  <View className="space-y-3 mb-8">
-                    <TouchableOpacity
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        handleInternalChat(selectedProduct);
-                      }}
-                      activeOpacity={0.8}
-                      style={[styles.whatsappBtn, { backgroundColor: '#4F46E5', shadowColor: '#4F46E5', marginBottom: 0 }]}
-                    >
-                      <MessageCircle size={22} color="white" style={{ marginRight: 10 }} />
-                      <Text style={styles.whatsappBtnText}>Chat Vecinal (Privado)</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        handleWhatsApp(selectedProduct);
-                      }}
-                      activeOpacity={0.8}
-                      style={[
-                        styles.whatsappBtn,
-                        {
-                          backgroundColor: 'transparent',
-                          borderColor: '#25D366',
-                          borderWidth: 2,
-                          shadowOpacity: 0,
-                          elevation: 0,
-                          marginTop: 12
-                        }
-                      ]}
-                    >
-                      <MessageCircle size={22} color="#25D366" style={{ marginRight: 10 }} />
-                      <Text style={[styles.whatsappBtnText, { color: '#25D366' }]}>WhatsApp Directo</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View className="flex-row items-center justify-center py-4">
-                    <View className="w-10 h-10 bg-slate-100 rounded-2xl items-center justify-center mr-3">
-                      <User size={18} color="#64748B" />
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => {
-                        if (selectedProduct.user_id) {
-                          setSelectedProduct(null);
-                          router.push({
-                            pathname: '/merchant/[id]',
-                            params: { id: selectedProduct.user_id }
-                          });
-                        }
-                      }}
-                    >
-                      <Text className="text-slate-400 font-bold text-[10px] uppercase">Vendedor</Text>
-                      <View className="flex-row items-center">
-                        <Text className="text-slate-800 font-black text-sm mr-1.5">{selectedProduct.seller}</Text>
-                        {selectedProduct.is_verified && (
-                          <BadgeCheck size={16} color="#8b5cf6" fill="#f5f3ff" />
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Botón de Reporte */}
-                  <TouchableOpacity
-                    onPress={() => handleReport(selectedProduct)}
-                    className="mt-4 mb-8 flex-row items-center justify-center py-2 px-4 bg-red-50 rounded-xl"
-                  >
-                    <Flag size={14} color="#EF4444" />
-                    <Text className="text-red-500 font-black text-[10px] uppercase ml-2 tracking-widest">Reportar Problema</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            )}
-          </View>
-        </View>
-      </Modal >
+        product={selectedProduct as any}
+        onClose={() => setSelectedProduct(null)}
+        userRole={userRole}
+        onInternalChat={handleInternalChat}
+      />
 
       <ProactiveReviewModal />
 
@@ -1253,8 +1194,8 @@ export default function TabOneScreen() {
             <TouchableOpacity activeOpacity={1} style={{ flex: 1 }}>
               <View style={styles.modalHeader}>
                 <View className="flex-row items-center">
-                  <View className="w-10 h-10 bg-brand-50 rounded-2xl items-center justify-center mr-3">
-                    <Bell size={20} color="#8b5cf6" />
+                  <View style={{ backgroundColor: themeColorLight }} className="w-10 h-10 rounded-2xl items-center justify-center mr-3">
+                    <Bell size={20} color={themeColor} />
                   </View>
                   <Text style={styles.modalTitle}>Notificaciones</Text>
                 </View>
@@ -1264,9 +1205,9 @@ export default function TabOneScreen() {
               </View>
 
               <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
-                <View className="bg-brand-50/50 p-4 rounded-3xl mb-6 border border-brand-100/50">
-                  <Text className="text-brand-900 font-black text-sm text-center">Centro de Negocios</Text>
-                  <Text className="text-brand-500 text-[10px] uppercase font-bold tracking-widest text-center mt-1">Gestión de Notificaciones para Comerciantes</Text>
+                <View style={{ backgroundColor: themeColorLight, borderColor: themeColorVeryLight }} className="p-4 rounded-3xl mb-6 border">
+                  <Text style={{ color: themeColor }} className="font-black text-sm text-center">Centro de Negocios</Text>
+                  <Text style={{ color: themeColor }} className="text-[10px] uppercase font-bold tracking-widest text-center mt-1">Gestión de Notificaciones para Comerciantes</Text>
                 </View>
 
                 {notifications.length > 0 ? (
@@ -1306,8 +1247,8 @@ export default function TabOneScreen() {
                         </Text>
                         <Text className="text-slate-400 text-[10px] font-bold mt-2 uppercase tracking-tighter">"{notif.products?.title}"</Text>
                       </View>
-                      <View className="w-8 h-8 bg-brand-50 rounded-xl items-center justify-center">
-                        <ChevronRight size={16} color="#8b5cf6" />
+                      <View style={{ backgroundColor: themeColorLight }} className="w-8 h-8 rounded-xl items-center justify-center">
+                        <ChevronRight size={16} color={themeColor} />
                       </View>
                     </TouchableOpacity>
                   ))
@@ -1867,8 +1808,6 @@ const styles = StyleSheet.create({
   alertModalButtonText: {
     color: 'white',
     fontWeight: '900',
-    fontSize: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontSize: 18,
   },
 });

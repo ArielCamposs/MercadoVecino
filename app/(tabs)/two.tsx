@@ -644,27 +644,29 @@ export default function ProfileScreen() {
 
 
 
-            <TouchableOpacity
-              onPress={() => Alert.alert('Notificaciones', `Tienes ${pendingSales.length} ventas pendientes por confirmar.`)}
-              activeOpacity={0.6}
-              className="flex-row items-center p-5 border-b border-slate-50"
-            >
-              <View className="w-10 h-10 bg-slate-100 rounded-2xl items-center justify-center mr-4 relative">
-                <Bell size={20} color="#475569" />
-                {pendingSales.length > 0 && (
-                  <View className="absolute -top-1 -right-1 bg-red-500 w-5 h-5 rounded-full items-center justify-center border-2 border-white">
-                    <Text className="text-white text-[10px] font-black">{pendingSales.length}</Text>
-                  </View>
-                )}
-              </View>
-              <View className="flex-1">
-                <Text className="text-slate-700 font-bold">Notificaciones</Text>
-                {profile?.role === 'vendor' && pendingSales.length > 0 && (
-                  <Text className="text-slate-400 text-[10px] font-medium">Ventas pendientes de confirmar</Text>
-                )}
-              </View>
-              <ChevronRight size={20} color="#cbd5e1" />
-            </TouchableOpacity>
+            {profile?.role?.toLowerCase().trim() !== 'admin' && (
+              <TouchableOpacity
+                onPress={() => Alert.alert('Notificaciones', `Tienes ${pendingSales.length} ventas pendientes por confirmar.`)}
+                activeOpacity={0.6}
+                className="flex-row items-center p-5 border-b border-slate-50"
+              >
+                <View className="w-10 h-10 bg-slate-100 rounded-2xl items-center justify-center mr-4 relative">
+                  <Bell size={20} color="#475569" />
+                  {pendingSales.length > 0 && (
+                    <View className="absolute -top-1 -right-1 bg-red-500 w-5 h-5 rounded-full items-center justify-center border-2 border-white">
+                      <Text className="text-white text-[10px] font-black">{pendingSales.length}</Text>
+                    </View>
+                  )}
+                </View>
+                <View className="flex-1">
+                  <Text className="text-slate-700 font-bold">Notificaciones</Text>
+                  {profile?.role === 'vendor' && pendingSales.length > 0 && (
+                    <Text className="text-slate-400 text-[10px] font-medium">Ventas pendientes de confirmar</Text>
+                  )}
+                </View>
+                <ChevronRight size={20} color="#cbd5e1" />
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               onPress={() => Alert.alert('Seguridad', 'Próximamente: Cambio de clave y privacidad')}
@@ -776,7 +778,7 @@ export default function ProfileScreen() {
           )}
 
           {/* Section: Mis Seguimientos (Neighbors Only) */}
-          {profile?.role !== 'vendor' && (
+          {profile?.role !== 'vendor' && profile?.role?.toLowerCase().trim() !== 'admin' && (
             <>
               <Text className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mb-4 ml-4 mt-8">Mis Compras y Seguimientos</Text>
               <View className="bg-white rounded-[32px] overflow-hidden shadow-sm border border-slate-100 mb-8 p-6">
@@ -862,22 +864,7 @@ export default function ProfileScreen() {
               <ChevronRight size={20} color="#cbd5e1" />
             </TouchableOpacity>
 
-            {profile?.role?.toLowerCase().trim() === 'admin' && (
-              <TouchableOpacity
-                onPress={() => router.push('/admin' as any)}
-                activeOpacity={0.6}
-                className="flex-row items-center p-5 border-b border-slate-50"
-              >
-                <View className="w-10 h-10 bg-indigo-50 rounded-2xl items-center justify-center mr-4">
-                  <Shield size={20} color="#4F46E5" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-indigo-600 font-black">Panel de Administración</Text>
-                  <Text className="text-slate-400 text-[10px] font-medium">Control total de la aplicación</Text>
-                </View>
-                <ChevronRight size={20} color="#C7D2FE" />
-              </TouchableOpacity>
-            )}
+            {/* Remove Admin Panel Link from profile as it is now a tab */}
           </View>
 
           {/* Sign Out Button */}

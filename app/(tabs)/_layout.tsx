@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Heart, Home, MessageCircle, PlusCircle, User } from 'lucide-react-native';
+import { Heart, Home, MessageCircle, PlusCircle, ShieldCheck, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -175,8 +175,21 @@ export default function TabLayout() {
         name="favorites"
         options={{
           title: 'Favoritos',
-          href: '/favorites',
-          tabBarIcon: ({ color, focused }) => <Heart size={24} color={focused ? '#FF0000' : color} fill={focused ? '#FF0000' : 'transparent'} />,
+          href: userRole === 'admin' ? null : '/favorites',
+          tabBarIcon: ({ color, focused }) => (
+            <Heart size={24} color={focused ? '#FF0000' : color} fill={focused ? '#FF0000' : 'transparent'} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: 'Admin',
+          href: userRole === 'admin' ? '/admin' : null,
+          tabBarIcon: ({ color }) => (
+            <ShieldCheck size={24} color={color} />
+          ),
         }}
       />
 
