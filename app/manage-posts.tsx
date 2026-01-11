@@ -27,6 +27,8 @@ interface Product {
     category: string;
     image_url: string;
     created_at: string;
+    stock_count?: number;
+    low_stock_threshold?: number;
 }
 
 export default function ManagePostsScreen() {
@@ -107,8 +109,21 @@ export default function ManagePostsScreen() {
                 <View>
                     <Text className="text-lg font-bold text-slate-800" numberOfLines={1}>{item.title}</Text>
                     <Text className="text-blue-600 font-extrabold">${item.price.toLocaleString()}</Text>
-                    <View className="bg-slate-100 self-start px-2 py-0.5 rounded-md mt-1">
+                    <View className="bg-slate-100 self-start px-2 py-0.5 rounded-md mt-1 flex-row items-center">
                         <Text className="text-slate-500 text-[10px] font-bold uppercase">{item.category}</Text>
+                    </View>
+
+                    {/* Stock Indicator */}
+                    <View className="flex-row items-center mt-2">
+                        <View className={`w-2 h-2 rounded-full mr-2 ${(item.stock_count || 0) <= (item.low_stock_threshold || 5) ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                        <Text className={`text-[11px] font-bold ${((item.stock_count || 0) <= (item.low_stock_threshold || 5)) ? 'text-red-600' : 'text-slate-500'}`}>
+                            Stock: {item.stock_count || 0}
+                        </Text>
+                        {((item.stock_count || 0) <= (item.low_stock_threshold || 5)) && (
+                            <View className="bg-red-50 px-1.5 py-0.5 rounded ml-2 border border-red-100">
+                                <Text className="text-red-600 text-[8px] font-black uppercase">¡Bajo!</Text>
+                            </View>
+                        )}
                     </View>
                 </View>
 

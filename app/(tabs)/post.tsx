@@ -104,6 +104,10 @@ export default function PostScreen() {
     const [allowsDelivery, setAllowsDelivery] = useState(false);
     const [deliveryFee, setDeliveryFee] = useState('0');
 
+    // New Stock Inventory Fields
+    const [stockCount, setStockCount] = useState('0');
+    const [lowStockThreshold, setLowStockThreshold] = useState('5');
+
     useEffect(() => {
         async function initializeData() {
             try {
@@ -166,6 +170,8 @@ export default function PostScreen() {
                             setAllowsPickup(productData.allows_pickup ?? true);
                             setAllowsDelivery(productData.allows_delivery ?? false);
                             setDeliveryFee((productData.delivery_fee || 0).toString());
+                            setStockCount((productData.stock_count || 0).toString());
+                            setLowStockThreshold((productData.low_stock_threshold || 5).toString());
                         }
                     } else {
                         // Crucial: Reset form when NOT editing to avoid state persistence from previous edit
@@ -309,6 +315,8 @@ export default function PostScreen() {
                 user_id: user.id,
                 image_url: finalImageUrls[0], // Keep for backward compatibility
                 image_urls: finalImageUrls, // New multi-image field
+                stock_count: parseInt(stockCount, 10) || 0,
+                low_stock_threshold: parseInt(lowStockThreshold, 10) || 0,
             };
 
             // Fetch moderation config to decide initial status
@@ -424,6 +432,8 @@ export default function PostScreen() {
         setAllowsPickup(true);
         setAllowsDelivery(false);
         setDeliveryFee('0');
+        setStockCount('0');
+        setLowStockThreshold('5');
     };
 
     const insets = useSafeAreaInsets();
@@ -653,6 +663,44 @@ export default function PostScreen() {
                             )}
                         </View>
 
+                        {/* Inventory Management Section */}
+                        <View className="bg-white p-6 rounded-[32px] border border-brand-50 shadow-sm mt-6">
+                            <View className="flex-row items-center mb-4">
+                                <View className="w-8 h-8 bg-brand-50 rounded-lg items-center justify-center mr-3">
+                                    <View className="bg-brand-600 w-4 h-4 rounded-sm" />
+                                </View>
+                                <Text className="text-brand-700 font-black text-base">Gestión de Inventario</Text>
+                            </View>
+
+                            <View className="flex-row gap-4">
+                                <View className="flex-1">
+                                    <Text className="text-slate-900 font-bold text-sm mb-2 ml-1">Stock Actual</Text>
+                                    <TextInput
+                                        value={stockCount}
+                                        onChangeText={(val) => setStockCount(val.replace(/[^0-9]/g, ''))}
+                                        placeholder="0"
+                                        keyboardType="numeric"
+                                        className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-slate-900 text-base font-bold"
+                                        placeholderTextColor="#94A3B8"
+                                    />
+                                </View>
+                                <View className="flex-1">
+                                    <Text className="text-slate-900 font-bold text-sm mb-2 ml-1">Alerta Stock Bajo</Text>
+                                    <TextInput
+                                        value={lowStockThreshold}
+                                        onChangeText={(val) => setLowStockThreshold(val.replace(/[^0-9]/g, ''))}
+                                        placeholder="5"
+                                        keyboardType="numeric"
+                                        className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-slate-900 text-base font-bold"
+                                        placeholderTextColor="#94A3B8"
+                                    />
+                                </View>
+                            </View>
+                            <Text className="text-slate-400 text-[10px] mt-3 mx-1 font-medium italic">
+                                Te avisaremos cuando tu stock sea igual o menor al nivel de alerta.
+                            </Text>
+                        </View>
+
                         <View className="bg-transparent mt-5">
                             <View className="flex-row justify-between items-center mb-2">
                                 <Text className="text-slate-700 font-bold ml-1">Servicios / Precios Adicionales</Text>
@@ -730,7 +778,7 @@ export default function PostScreen() {
                     </TouchableOpacity>
                 </ScrollView>
             </KeyboardAvoidingView>
-        </SafeAreaView>
+        </SafeAreaView >
     );
 }
 

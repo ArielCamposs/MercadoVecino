@@ -31,6 +31,7 @@ import {
   ActivityIndicator,
   Alert,
   DeviceEventEmitter,
+  Dimensions,
   Image,
   Modal,
   RefreshControl,
@@ -41,6 +42,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { LineChart } from 'react-native-chart-kit';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 
@@ -92,7 +94,8 @@ export default function ProfileScreen() {
     totalContacts: 0,
     monthlyContacts: 0,
     todayContacts: 0,
-    topProducts: [] as { title: string, count: number }[]
+    topProducts: [] as { title: string, count: number }[],
+    weeklyData: [0, 0, 0, 0, 0, 0, 0]
   });
   const [myTickets, setMyTickets] = useState<any[]>([]);
   const [isSupportModalVisible, setIsSupportModalVisible] = useState(false);
@@ -141,11 +144,30 @@ export default function ProfileScreen() {
         .sort((a, b) => b.count - a.count)
         .slice(0, 3);
 
+      // 4. Calculate weekly data (last 7 days)
+      const weeklyData = [0, 0, 0, 0, 0, 0, 0];
+      const days: string[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        d.setHours(0, 0, 0, 0);
+        days.push(d.toISOString().split('T')[0]);
+      }
+
+      allContacts.forEach(c => {
+        const dateStr = c.created_at.split('T')[0];
+        const dayIndex = days.indexOf(dateStr);
+        if (dayIndex !== -1) {
+          weeklyData[dayIndex]++;
+        }
+      });
+
       setBusinessMetrics({
         totalContacts: allContacts.length,
         todayContacts: today,
         monthlyContacts: monthly,
-        topProducts
+        topProducts,
+        weeklyData
       });
 
     } catch (err) {
@@ -623,6 +645,53 @@ export default function ProfileScreen() {
                 ) : (
                   <Text className="text-white/60 text-sm italic py-2">Pronto verás aquí tus productos más buscados.</Text>
                 )}
+              </View>
+
+              {/* Weekly Evolution Chart */}
+              <View className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm mb-4">
+                <View className="flex-row items-center justify-between mb-4">
+                  <Text className="text-slate-900 font-black text-lg">Evolución Semanal</Text>
+                  <View className="bg-brand-50 px-2 py-1 rounded-lg">
+                    <Text className="text-brand-600 font-black text-[8px] uppercase">Últimos 7 días</Text>
+                  </View>
+                </View>
+
+                <LineChart
+                  data={{
+                    labels: ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'].slice(-7), // Simplified, ideally dynamic
+                    datasets: [{
+                      data: businessMetrics.weeklyData
+                    }]
+                  }}
+                  width={Dimensions.get('window').width - 80}
+                  height={180}
+                  chartConfig={{
+                    backgroundColor: '#ffffff',
+                    backgroundGradientFrom: '#ffffff',
+                    backgroundGradientTo: '#ffffff',
+                    decimalPlaces: 0,
+                    color: (opacity = 1) => `rgba(139, 92, 246, ${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})`,
+                    style: {
+                      borderRadius: 16
+                    },
+                    propsForDots: {
+                      r: '4',
+                      strokeWidth: '2',
+                      stroke: '#8b5cf6'
+                    }
+                  }}
+                  bezier
+                  style={{
+                    marginVertical: 8,
+                    borderRadius: 16,
+                    paddingRight: 40
+                  }}
+                  withInnerLines={false}
+                  withOuterLines={false}
+                  withVerticalLines={false}
+                  withHorizontalLines={true}
+                />
               </View>
             </View>
           )}
