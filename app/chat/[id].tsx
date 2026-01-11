@@ -2,6 +2,7 @@ import ProductDetailModal from '@/components/ProductDetailModal';
 import PromptReviewModal from '@/components/PromptReviewModal';
 import { sendPushNotification } from '@/lib/notification_sender';
 import { supabase } from '@/lib/supabase';
+import { translateError } from '@/lib/translations';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { AlertTriangle, CheckCircle2, ChevronLeft, Info, Send, ShoppingBag, User } from 'lucide-react-native';
@@ -324,9 +325,9 @@ export default function ChatScreen() {
                 setMessages(msgs || []);
                 markAsRead();
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('[Chat] Error:', err);
-            Alert.alert('Error', 'No pudimos cargar la conversación.');
+            Alert.alert('Error', translateError(err.message));
         } finally {
             setLoading(false);
         }
@@ -478,9 +479,9 @@ export default function ChatScreen() {
                             );
 
                             Alert.alert("Propuesta Enviada", "El vecino debe confirmar la compra para finalizar el proceso.");
-                        } catch (err) {
+                        } catch (err: any) {
                             console.error('[Chat] Error al cerrar trato:', err);
-                            Alert.alert("Error", "No pudimos iniciar el cierre. Inténtalo de nuevo.");
+                            Alert.alert("Error", translateError(err.message));
                         } finally {
                             setSending(false);
                         }
@@ -519,9 +520,9 @@ export default function ChatScreen() {
             setShowReviewModal(true);
 
             Alert.alert("¡Trato Hecho!", "Gracias por confirmar. Tu calificación ayuda mucho al vendedor.");
-        } catch (err) {
+        } catch (err: any) {
             console.error('[Chat] Error al confirmar:', err);
-            Alert.alert("Error", "No pudimos confirmar la compra.");
+            Alert.alert("Error", translateError(err.message));
         } finally {
             setSending(false);
         }
@@ -543,7 +544,7 @@ export default function ChatScreen() {
             setContactStatus('pending');
 
             await sendMessage("❌ El vecino ha indicado que el trato aún no se concreta.");
-        } catch (err) {
+        } catch (err: any) {
             console.error('[Chat] Error al rechazar:', err);
         } finally {
             setSending(false);
@@ -596,9 +597,9 @@ export default function ChatScreen() {
 
             Alert.alert('Respuesta Enviada', 'El usuario recibirá una notificación.');
             setTicketData({ ...ticketData, admin_reply: adminReply.trim(), status: 'in_progress' });
-        } catch (err) {
+        } catch (err: any) {
             console.error('[Soporte] Error al enviar respuesta:', err);
-            Alert.alert('Error', 'No se pudo enviar la respuesta.');
+            Alert.alert('Error', translateError(err.message));
         } finally {
             setSending(false);
         }
@@ -639,9 +640,9 @@ export default function ChatScreen() {
 
                             Alert.alert('Ticket Resuelto', 'El usuario ha sido notificado.');
                             setTicketData({ ...ticketData, status: 'resolved' });
-                        } catch (err) {
+                        } catch (err: any) {
                             console.error('[Soporte] Error al resolver ticket:', err);
-                            Alert.alert('Error', 'No se pudo resolver el ticket.');
+                            Alert.alert('Error', translateError(err.message));
                         } finally {
                             setSending(false);
                         }

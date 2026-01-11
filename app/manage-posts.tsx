@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { translateError } from '@/lib/translations';
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
     ArrowLeft,
@@ -51,7 +52,7 @@ export default function ManagePostsScreen() {
             if (error) throw error;
             setProducts(data || []);
         } catch (error: any) {
-            Alert.alert('Error', 'No pudimos cargar tus publicaciones');
+            Alert.alert('Error', translateError(error.message));
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -89,7 +90,7 @@ export default function ManagePostsScreen() {
 
                             setProducts(products.filter(p => p.id !== id));
                         } catch (error: any) {
-                            Alert.alert('Error', 'No se pudo eliminar la publicación');
+                            Alert.alert('Error', translateError(error.message));
                         }
                     }
                 }

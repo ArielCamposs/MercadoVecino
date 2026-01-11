@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { getDeviceId } from '../../lib/device_id';
 import { supabase } from '../../lib/supabase';
+import { translateError } from '../../lib/translations';
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -26,7 +27,28 @@ export default function LoginScreen() {
         });
 
         if (error) {
-            Alert.alert('Error de acceso', error.message);
+            // Check if the error is due to invalid credentials
+            if (error.message.toLowerCase().includes('invalid login credentials')) {
+                try {
+                    // Check if the email exists in our profiles table
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('id')
+                        .eq('email', email.trim())
+                        .maybeSingle();
+
+                    if (!profile) {
+                        Alert.alert('Correo no registrado', 'No encontramos una cuenta con este correo electrónico.');
+                    } else {
+                        Alert.alert('Contraseña incorrecta', 'La contraseña ingresada no es válida para este correo.');
+                    }
+                } catch (checkErr) {
+                    console.error('[Login] Error verificando existencia de correo:', checkErr);
+                    Alert.alert('Error de acceso', translateError(error.message));
+                }
+            } else {
+                Alert.alert('Error de acceso', translateError(error.message));
+            }
             setLoading(false);
             return;
         }
@@ -38,7 +60,10 @@ export default function LoginScreen() {
                 const deviceId = await getDeviceId();
                 await supabase
                     .from('profiles')
-                    .update({ last_device_id: deviceId })
+                    .update({
+                        last_device_id: deviceId,
+                        email: user.email // Sync email on successful login
+                    })
                     .eq('id', user.id);
             }
         } catch (deviceError) {
@@ -79,16 +104,19 @@ export default function LoginScreen() {
                 Alert.alert('Verifica tu correo', 'Te hemos enviado un enlace de confirmación. Por favor revísalo para activar tu cuenta.');
             } else if (data.user) {
                 // Si el registro fue automático (sin verificación de email pendiente)
-                // registramos el dispositivo de inmediato
+                // registramos el dispositivo de inmediato y guardamos el email
                 const deviceId = await getDeviceId();
                 await supabase
                     .from('profiles')
-                    .update({ last_device_id: deviceId })
+                    .update({
+                        last_device_id: deviceId,
+                        email: data.user.email
+                    })
                     .eq('id', data.user.id);
             }
         } catch (err: any) {
             console.error('[SignUp Error Detail]', err);
-            Alert.alert('Error de registro', err.message || 'No se pudo completar el registro. Inténtalo de nuevo.');
+            Alert.alert('Error de registro', translateError(err.message));
         } finally {
             setLoading(false);
         }

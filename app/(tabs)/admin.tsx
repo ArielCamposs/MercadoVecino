@@ -45,6 +45,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { logAdminAction } from '../../lib/admin_logger';
 import { broadcastPushNotification } from '../../lib/notification_sender';
 import { supabase } from '../../lib/supabase';
+import { translateError } from '../../lib/translations';
 
 import {
     ActivityLogItem,
@@ -233,7 +234,7 @@ export default function AdminDashboard() {
             fetchData();
         } catch (err: any) {
             console.error('[Admin] Error al capturar verificación:', err);
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -261,7 +262,7 @@ export default function AdminDashboard() {
             setShowUserModal(false);
             fetchData();
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -309,7 +310,7 @@ export default function AdminDashboard() {
             setShowUserModal(false);
             fetchData();
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -361,7 +362,7 @@ export default function AdminDashboard() {
             setShowUserModal(false);
             fetchData();
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -437,7 +438,7 @@ export default function AdminDashboard() {
             fetchAppConfig();
             await logAdminAction('update_config', undefined, 'system', { key, value });
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -458,7 +459,7 @@ export default function AdminDashboard() {
             fetchData();
             await logAdminAction('approve_product', productId, 'product');
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -479,7 +480,7 @@ export default function AdminDashboard() {
             fetchData();
             await logAdminAction('reject_product', productId, 'product');
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -583,7 +584,7 @@ export default function AdminDashboard() {
             fetchSpecialEvents();
             Alert.alert('Éxito', 'Evento creado correctamente.');
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
         } finally {
             setIsActionLoading(false);
         }
@@ -609,7 +610,7 @@ export default function AdminDashboard() {
                             await logAdminAction('delete_event', id, 'event', {});
                             fetchSpecialEvents();
                         } catch (err: any) {
-                            Alert.alert('Error', err.message);
+                            Alert.alert('Error', translateError(err.message));
                         }
                     }
                 }
@@ -629,7 +630,7 @@ export default function AdminDashboard() {
             await logAdminAction(active ? 'activate_event' : 'deactivate_event', id, 'event', {});
             fetchSpecialEvents();
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
         } finally {
             setIsActionLoading(false);
         }
@@ -646,7 +647,7 @@ export default function AdminDashboard() {
             fetchSpecialEvents();
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
         }
     };
 
@@ -667,7 +668,7 @@ export default function AdminDashboard() {
             fetchSpecialEvents();
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
         }
     };
 
@@ -692,7 +693,7 @@ export default function AdminDashboard() {
             fetchSpecialEvents();
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
         }
     };
 
@@ -707,7 +708,7 @@ export default function AdminDashboard() {
             fetchSpecialEvents();
             await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
         }
     };
 
@@ -1200,7 +1201,7 @@ export default function AdminDashboard() {
             setContent('');
             fetchData();
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setLoading(false);
@@ -1220,7 +1221,7 @@ export default function AdminDashboard() {
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             fetchData();
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -1248,7 +1249,7 @@ export default function AdminDashboard() {
                             await logAdminAction('delete_user', userId, 'user');
                             fetchData();
                         } catch (err: any) {
-                            Alert.alert('Error', err.message);
+                            Alert.alert('Error', translateError(err.message));
                             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                         } finally {
                             setIsActionLoading(false);
@@ -1277,7 +1278,7 @@ export default function AdminDashboard() {
                             await logAdminAction('delete_product', productId, 'product');
                             fetchData();
                         } catch (err: any) {
-                            Alert.alert('Error', err.message);
+                            Alert.alert('Error', translateError(err.message));
                             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                         } finally {
                             setIsActionLoading(false);
@@ -1431,7 +1432,7 @@ export default function AdminDashboard() {
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
             console.error('[CrearBanner] Error:', err);
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -1445,7 +1446,7 @@ export default function AdminDashboard() {
             fetchData();
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
     };
@@ -1463,7 +1464,7 @@ export default function AdminDashboard() {
                         fetchData();
                         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     } catch (err: any) {
-                        Alert.alert('Error', err.message);
+                        Alert.alert('Error', translateError(err.message));
                         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                     }
                 }
@@ -1526,7 +1527,7 @@ export default function AdminDashboard() {
                             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         } catch (err: any) {
                             console.error('[Admin] Error al cambiar Mantenimiento:', err);
-                            Alert.alert('Error', err.message);
+                            Alert.alert('Error', translateError(err.message));
                             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                         }
                     }
@@ -1564,7 +1565,7 @@ export default function AdminDashboard() {
             setTargetedMessage('');
         } catch (err: any) {
             console.error('[Admin] Error al enviar alerta dirigida:', err);
-            Alert.alert('Error', 'No se pudo enviar la notificación: ' + err.message);
+            Alert.alert('Error', 'No se pudo enviar la notificación: ' + translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -1666,7 +1667,7 @@ export default function AdminDashboard() {
                             fetchData();
                             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                         } catch (err: any) {
-                            Alert.alert('Error', err.message);
+                            Alert.alert('Error', translateError(err.message));
                             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
                         }
                     }
@@ -1698,7 +1699,7 @@ export default function AdminDashboard() {
             fetchData();
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);
@@ -1716,7 +1717,7 @@ export default function AdminDashboard() {
             fetchData();
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (err: any) {
-            Alert.alert('Error', err.message);
+            Alert.alert('Error', translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
     };
@@ -1752,7 +1753,7 @@ export default function AdminDashboard() {
             }
         } catch (err: any) {
             console.error('Error al seleccionar producto destacado:', err);
-            Alert.alert('Error', 'No se pudo cargar el detalle del producto: ' + err.message);
+            Alert.alert('Error', 'No se pudo cargar el detalle del producto: ' + translateError(err.message));
             await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {
             setIsActionLoading(false);

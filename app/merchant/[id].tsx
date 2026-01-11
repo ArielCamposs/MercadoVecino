@@ -3,6 +3,7 @@ import ProductDetailModal from '@/components/ProductDetailModal';
 import ProductGalleryModal from '@/components/ProductGalleryModal';
 import SkeletonProductCard from '@/components/SkeletonProductCard';
 import { supabase } from '@/lib/supabase';
+import { translateError } from '@/lib/translations';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -135,9 +136,9 @@ export default function MerchantProfileScreen() {
                     };
                 });
                 setProducts(formattedProducts);
-            } catch (error) {
+            } catch (error: any) {
                 console.error('[PerfilComerciante] Error al obtener datos:', error);
-                Alert.alert('Error', 'No pudimos cargar el perfil del comerciante');
+                Alert.alert('Error', translateError(error.message));
             } finally {
                 setLoading(false);
             }
@@ -283,9 +284,9 @@ export default function MerchantProfileScreen() {
                     params: { id: roomId }
                 });
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('[Chat] Error al inicializar conversación:', err);
-            Alert.alert('Error', 'No pudimos iniciar el chat. Inténtalo de nuevo.');
+            Alert.alert('Error', translateError(err.message));
         }
     };
 

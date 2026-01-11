@@ -23,6 +23,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { translateError } from '../lib/translations';
 import { Product } from './ProductCard';
 import ReviewSection from './ReviewSection';
 
@@ -68,8 +69,8 @@ export default function ProductDetailModal({
             } else {
                 await Linking.openURL(`whatsapp://send?phone=${cleanNumber}&text=${encodeURIComponent(message)}`);
             }
-        } catch (err) {
-            Alert.alert('Error', 'No pudimos abrir WhatsApp. Asegúrate de tener la app instalada.');
+        } catch (err: any) {
+            Alert.alert('Error', translateError(err.message));
         }
     };
 

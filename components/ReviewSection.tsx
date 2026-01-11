@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { translateError } from '@/lib/translations';
 import { Check, MessageSquare, Send, ShoppingBag, Star, Store, User } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -227,7 +228,7 @@ export default function ReviewSection({ productId, onReviewSubmitted }: ReviewSe
             if (onReviewSubmitted) onReviewSubmitted();
             Alert.alert('¡Gracias!', 'Tu reseña ha sido publicada.');
         } catch (err: any) {
-            Alert.alert('Error', 'No pudimos guardar tu reseña. Inténtalo de nuevo.');
+            Alert.alert('Error', translateError(err.message));
             console.error('[Reseñas] Error al enviar reseña:', err);
         } finally {
             setSubmitting(false);

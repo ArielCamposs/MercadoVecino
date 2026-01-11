@@ -52,6 +52,7 @@ import Animated, {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { supabase } from '@/lib/supabase';
+import { translateError } from '@/lib/translations';
 
 const { width } = Dimensions.get('window');
 
@@ -316,8 +317,8 @@ export default function TabOneScreen() {
       setFeaturedProducts(featured);
     } catch (error: any) {
       console.error('[Inicio] Error al cargar productos:', error);
-      if (error.message !== 'Unexpected token') {
-        Alert.alert('Error de Conexión', 'No pudimos sincronizar los productos.');
+      if (error && error.message !== 'Unexpected token') {
+        Alert.alert('Error de Conexión', translateError(error.message));
       }
     } finally {
       setLoading(false);

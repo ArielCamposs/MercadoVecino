@@ -2,6 +2,7 @@ import ProductCard, { Product } from '@/components/ProductCard';
 import ProductDetailModal from '@/components/ProductDetailModal';
 import SkeletonProductCard from '@/components/SkeletonProductCard';
 import { supabase } from '@/lib/supabase';
+import { translateError } from '@/lib/translations';
 import { useRouter } from 'expo-router';
 import { Heart, SearchX } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
@@ -201,9 +202,9 @@ export default function FavoritesScreen() {
                     params: { id: roomId }
                 });
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('[Chat] Error al inicializar conversación:', err);
-            Alert.alert('Error', 'No pudimos iniciar el chat. Inténtalo de nuevo.');
+            Alert.alert('Error', translateError(err.message));
         }
     };
 

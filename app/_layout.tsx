@@ -59,8 +59,11 @@ function InitialLayout() {
       setSession(session);
 
       if (session?.user) {
-        // Heartbeat immediate
-        supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', session.user.id).then();
+        // Heartbeat immediate & Email Sync
+        supabase.from('profiles').update({
+          last_seen: new Date().toISOString(),
+          email: session.user.email
+        }).eq('id', session.user.id).then();
 
         // Fetch user metadata (Role + Ban Status)
         const { data: profile } = await supabase

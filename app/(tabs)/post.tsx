@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { translateError } from '@/lib/translations';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { CheckCircle2, Image as ImageIcon, User, X } from 'lucide-react-native';
@@ -293,7 +294,7 @@ export default function PostScreen() {
                     const uploadPromises = images.map(img => uploadSingleImage(img));
                     finalImageUrls = await Promise.all(uploadPromises);
                 } catch (err: any) {
-                    Alert.alert('Error de Imagen', err.message);
+                    Alert.alert('Error de Imagen', translateError(err.message));
                     setLoading(false);
                     return;
                 }
@@ -413,8 +414,7 @@ export default function PostScreen() {
             }
         } catch (error: any) {
             console.error('[Anuncio] Error al enviar:', error);
-            const errorMessage = error.message || 'No pudimos guardar tu producto. Por favor intenta de nuevo.';
-            Alert.alert('Error al Publicar', errorMessage);
+            Alert.alert('Error al Publicar', translateError(error.message));
         } finally {
             setLoading(false);
         }

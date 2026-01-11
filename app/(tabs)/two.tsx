@@ -45,6 +45,7 @@ import {
 import { LineChart } from 'react-native-chart-kit';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
+import { translateError } from '../../lib/translations';
 
 // Reusable helper for base64 to ArrayBuffer
 function decodeBase64(base64: string) {
@@ -409,7 +410,7 @@ export default function ProfileScreen() {
       setIsSupportModalVisible(false);
       fetchMyTickets(user.id);
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      Alert.alert('Error', translateError(err.message));
     } finally {
       setSubmittingTicket(false);
     }
@@ -537,7 +538,7 @@ export default function ProfileScreen() {
       fetchProfile();
     } catch (error: any) {
       console.error('[Perfil] Error de actualización:', error);
-      Alert.alert('Error', error.message || 'No se pudo actualizar el perfil');
+      Alert.alert('Error', translateError(error.message));
     } finally {
       setUpdating(false);
     }

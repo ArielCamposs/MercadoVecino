@@ -8,6 +8,7 @@ import Animated, {
   withSpring
 } from 'react-native-reanimated';
 import { supabase } from '../lib/supabase';
+import { translateError } from '../lib/translations';
 
 export interface Product {
   id: string;
@@ -123,8 +124,9 @@ export default function ProductCard({ product, onPress, index, userRole, themeCo
           }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Favoritos] Error al cambiar estado:', err);
+      Alert.alert('Error', translateError(err.message));
     } finally {
       setLoadingFav(false);
     }
